@@ -157,7 +157,7 @@ def addEntityAndComplexTypes(doc, entityRepo):
         )
 
     for actionType in doc.xpath('//edm:Action', namespaces=ALL_NAMESPACES):
-        print("Balaji", actionType.get('Name'))
+        print("Action: ", actionType.get('Name'))
         for child in actionType:
             print('    ',child.tag)
 
@@ -333,7 +333,7 @@ def findItemOffset(schemaDictionary, itemToFind):
 if __name__ == '__main__':
     # rde_schema_dictionary parse --schemaDir=directory --schemaFilename=filename
     parser = argparse.ArgumentParser()
-    parser.add_argument("-v", "--verbosity", help="increase output verbosity")
+    parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
     subparsers = parser.add_subparsers(dest='source')
 
     remote_parser = subparsers.add_parser('remote')
@@ -347,11 +347,12 @@ if __name__ == '__main__':
     local_parser.add_argument('--entity', type=str, required=True)
     local_parser.add_argument('--outputFile', type=str, required=False)
 
-    if len(sys.argv) == 1:
-        parser.print_help(sys.stderr)
-        sys.exit(1)
 
     args = parser.parse_args()
+
+    if len(sys.argv) == 1 or args.source is None:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
 
     # bring in all dependent documents and their corresponding namespaces
     docList = {}
@@ -363,10 +364,12 @@ if __name__ == '__main__':
     addNamespaces(source, docList, args.source)
 
     entity = args.entity
-    #pprint.PrettyPrinter(indent=3).pprint(docList)
+    if args.verbose:
+        pprint.PrettyPrinter(indent=3).pprint(docList)
 
     entityRepo = addAllEntityAndComplexTypes(docList)
-    #pprint.PrettyPrinter(indent=3).pprint(entityRepo)
+    if args.verbose:
+        pprint.PrettyPrinter(indent=3).pprint(entityRepo)
 
     # search for entity and build dictionary
     if entity in entityRepo:
