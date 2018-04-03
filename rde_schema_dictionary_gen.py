@@ -17,7 +17,7 @@ TYPE_DEFINITION = '{http://docs.oasis-open.org/odata/ns/edm}TypeDefinition'
 ENTITY_TYPE = '{http://docs.oasis-open.org/odata/ns/edm}EntityType'
 NAVIGATION_PROPERTY = '{http://docs.oasis-open.org/odata/ns/edm}NavigationProperty'
 ACTION_TYPE = '{http://docs.oasis-open.org/odata/ns/edm}Action'
-ALL_NAMESPACES = {'edm': 'http://docs.oasis-open.org/odata/ns/edm', 'edmx':'http://docs.oasis-open.org/odata/ns/edmx'}
+ALL_NAMESPACES = {'edm': 'http://docs.oasis-open.org/odata/ns/edm', 'edmx': 'http://docs.oasis-open.org/odata/ns/edmx'}
 
 OPTIMIZE_REDUNDANT_DICTIONARY_ENTRIES = True
 
@@ -65,7 +65,7 @@ def get_properties(some_type):
         m = re.compile('Edm\.(.*)').match(property_type)
         if m:  # primitive?
             primitive_type = m.group(1)
-            if primitive_type == "DateTimeOffset" or  primitive_type == "Duration" or primitive_type == "TimeOfDay" \
+            if primitive_type == "DateTimeOffset" or primitive_type == "Duration" or primitive_type == "TimeOfDay" \
                     or primitive_type == "Guid":
                 primitive_type = 'String'
             if ((primitive_type == "SByte") or (primitive_type == "Int16") or (primitive_type == "Int32") or
@@ -80,10 +80,10 @@ def get_properties(some_type):
                     # TODO fix references
                     # properties.append([propertyName, 'Array', strip_version(m.group(1)), 'AutoExpandRef'])
                     properties.append([property_name, 'Array', 'AutoExpandRef'])
-                else: # AutoExpand or not specified
+                else:  # AutoExpand or not specified
                     array_type = is_array.group(1)
 
-                    if array_type.startswith('Edm.'): # primitive types
+                    if array_type.startswith('Edm.'):  # primitive types
                         properties.append([property_name, 'Array', array_type, ''])
                     else:
                         properties.append([property_name, 'Array', strip_version(is_array.group(1)), 'AutoExpand'])
@@ -195,8 +195,8 @@ def add_namespaces(source, doc_list, local_or_remote):
                     # skip if we cannot bring the file down
                     return
         else:
-            with open(source, 'rb') as localFile:
-                schema_string = localFile.read()
+            with open(source, 'rb') as local_file:
+                schema_string = local_file.read()
 
     if schema_string != '':
         doc = etree.fromstring(schema_string)
@@ -268,7 +268,7 @@ def find_element_from_type(type):
     return None
 
 
-def print_table_data( data ):
+def print_table_data(data):
     print(tabulate(data, headers="firstrow", tablefmt="grid"))
 
 
@@ -283,10 +283,10 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity):
         entity_type = entity_repo[entity][ENTITY_REPO_TUPLE_TYPE_INDEX]
         start = len(schema_dictionary)
         for index, property in enumerate(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
-            if entity_type == 'Enum': # this is an enum
+            if entity_type == 'Enum':  # this is an enum
                 schema_dictionary.append(
                     [index + start, 'String', property[SEQ_NUMBER], property[FIELD_STRING], ''])
-            elif property[TYPE] == 'Array': # this is an array
+            elif property[TYPE] == 'Array':  # this is an array
                 # TODO fix == 5 by making AutoExpand also 4 elements
                 if len(property) == 5 and property[EXPAND] == 'AutoExpand':
                     schema_dictionary.append(
