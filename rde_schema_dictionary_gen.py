@@ -8,6 +8,7 @@ from operator import itemgetter
 import pprint
 from tabulate import tabulate
 import urllib.request
+import sys
 
 includeNamespaces = {}
 entityToPropertyMap = {}
@@ -332,7 +333,8 @@ def findItemOffset(schemaDictionary, itemToFind):
 if __name__ == '__main__':
     # rde_schema_dictionary parse --schemaDir=directory --schemaFilename=filename
     parser = argparse.ArgumentParser()
-    subparsers = parser.add_subparsers(dest='command')
+    parser.add_argument("-v", "--verbosity", help="increase output verbosity")
+    subparsers = parser.add_subparsers(dest='source')
 
     remote_parser = subparsers.add_parser('remote')
     remote_parser.add_argument('--schemaURL', type=str, required=True)
@@ -345,16 +347,20 @@ if __name__ == '__main__':
     local_parser.add_argument('--entity', type=str, required=True)
     local_parser.add_argument('--outputFile', type=str, required=False)
 
+    if len(sys.argv) == 1:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
+
     args = parser.parse_args()
 
     # bring in all dependent documents and their corresponding namespaces
     docList = {}
     source = ''
-    if args.command == 'local':
+    if args.source == 'local':
         source = args.schemaDir + '/' + args.schemaFilename
-    elif args.command == 'remote':
+    elif args.source == 'remote':
         source = args.schemaURL
-    addNamespaces(source, docList, args.command)
+    addNamespaces(source, docList, args.source)
 
     entity = args.entity
     #pprint.PrettyPrinter(indent=3).pprint(docList)
@@ -425,5 +431,3 @@ if __name__ == '__main__':
             print(dict)
     else:
         print('Error, cannot find entity:', entity)
-
-
