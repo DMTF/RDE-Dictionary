@@ -22,6 +22,15 @@ ALL_NAMESPACES = {'edm': 'http://docs.oasis-open.org/odata/ns/edm', 'edmx': 'htt
 
 OPTIMIZE_REDUNDANT_DICTIONARY_ENTRIES = True
 
+DICTIONARY_ENTRY_INDEX = 0
+DICTIONARY_ENTRY_FORMAT = 1
+DICTIONARY_ENTRY_SEQUENCE_NUMBER = 2
+DICTIONARY_ENTRY_FIELD_STRING = 3
+DICTIONARY_ENTRY_OFFSET = 4
+
+
+ENTITY_REPO_TUPLE_TYPE_INDEX = 0
+ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX = 1
 
 def get_base_properties(entity_type):
     properties = []
@@ -138,8 +147,6 @@ def extract_doc_name_from_url(url):
         return ''
 
 
-ENTITY_REPO_TUPLE_TYPE_INDEX = 0
-ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX = 1
 
 
 def add_entity_and_complex_types(doc, entity_repo):
@@ -178,15 +185,15 @@ def add_entity_and_complex_types(doc, entity_repo):
             print('    ', child.tag)
 
 
-def add_namespaces(source, doc_list, local_or_remote):
+def add_namespaces(source, doc_list):
     doc_name = source
     schema_string = ''
-    if local_or_remote == 'remote':
+    if args.source == 'remote':
         doc_name = extract_doc_name_from_url(source)
 
     # first load the CSDL file as a string
     if doc_name not in doc_list:
-        if local_or_remote == 'remote':
+        if args.source == 'remote':
             # ignore odata references
             if source.find('http://docs.oasis') == -1:
                 try:
@@ -211,14 +218,14 @@ def add_namespaces(source, doc_list, local_or_remote):
 
         # bring in all dependent documents and their corresponding namespaces
         for ref in doc.xpath('descendant-or-self::edmx:Reference', namespaces=ALL_NAMESPACES):
-            if local_or_remote == 'remote':
+            if args.source == 'remote':
                 dependent_source = ref.get('Uri')
             else:
                 dependent_source = args.schemaDir + '/metadata/' + extract_doc_name_from_url(ref.get('Uri'))
                 if os.path.exists(dependent_source) is False:
                     continue
                 print(dependent_source)
-            add_namespaces(dependent_source, doc_list, local_or_remote)
+            add_namespaces(dependent_source, doc_list)
 
 
 def find_enum(key, dictionary):
@@ -232,6 +239,30 @@ def find_enum(key, dictionary):
     return None
 
 
+def fix_enums(entity_repo, key):
+    if entity_repo[key][ENTITY_REPO_TUPLE_TYPE_INDEX] == 'Enum':
+        # build a list of json schema files that need to be scanned for the enum in question
+        [base_filename, enum_name] = key.split('.')
+        print("Need to look at json schema to fix enums for", key, base_filename)
+        enum_values = []
+        for file in os.listdir(args.schemaDir + '/json-schema/'):
+            if file.startswith(base_filename + '.'):
+                json_schema = json.load(open(args.schemaDir + '/json-schema/' + file))
+                # search json schema for enum
+
+                print("Looking for", enum_name, "in", args.schemaDir + '/json-schema/' + file)
+                json_enum = find_enum(enum_name, json_schema)
+                if json_enum is not None:
+                    print(json_enum["enum"])
+                    enum_values = enum_values + list((Counter(json_enum["enum"]) - Counter(enum_values)).elements())
+                    print(enum_values)
+
+        if len(enum_values):
+            # entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX] = [[enum] for enum in enum_values]
+            del entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX][:]
+            entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].extend([[enum] for enum in enum_values])
+
+
 def add_all_entity_and_complex_types(doc_list):
     entity_repo = {}
     for key in doc_list:
@@ -242,28 +273,9 @@ def add_all_entity_and_complex_types(doc_list):
 
     # second pass, add seq numbers
     for key in entity_repo:
-        # TODO: Fix enums
-        if entity_repo[key][ENTITY_REPO_TUPLE_TYPE_INDEX] == 'Enum':
-            # build a list of json schema files that need to be scanned for the enum in question
-            [base_filename, enum_name] = key.split('.')
-            print("Need to look at json schema to fix enums for", key, base_filename)
-            enum_values = []
-            for file in os.listdir(args.schemaDir + '/json-schema/'):
-                if file.startswith(base_filename + '.'):
-                    json_schema = json.load(open(args.schemaDir + '/json-schema/' + file))
-                    # search json schema for enum
-
-                    print("Looking for", enum_name,"in", args.schemaDir + '/json-schema/' + file)
-                    json_enum = find_enum(enum_name, json_schema)
-                    if json_enum is not None:
-                        print(json_enum["enum"])
-                        enum_values = enum_values + list((Counter(json_enum["enum"]) - Counter(enum_values)).elements())
-                        print(enum_values)
-
-            if len(enum_values):
-                #entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX] = [[enum] for enum in enum_values]
-                del entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX][:]
-                entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].extend([[enum] for enum in enum_values])
+        # TODO: Fix enums (works only for local mode currently)
+        if args.source == 'local' and entity_repo[key][ENTITY_REPO_TUPLE_TYPE_INDEX] == 'Enum':
+            fix_enums(entity_repo, key)
 
         for seq, item in enumerate(entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
             item.insert(0, seq)
@@ -333,21 +345,13 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity):
                 schema_dictionary.append([index + start, property[TYPE], property[SEQ_NUMBER], property[FIELD_STRING],
                                           property[OFFSET]])
 
-
-DICTIONARY_INDEX = 0
-DICTIONARY_FORMAT = 1
-DICTIONARY_SEQUENCE_NUMBER = 2
-DICTIONARY_FIELD_STRING = 3
-DICTIONARY_OFFSET = 4
-
-
 def print_dictionary_summary(schema_dictionary):
     print("Total Entries:", len(schema_dictionary))
     print("Fixed size consumed:", 10 * len(schema_dictionary))
     # calculate size of free form property names:
     total_field_string_size = 0
     for item in schema_dictionary:
-        total_field_string_size = total_field_string_size + len(item[DICTIONARY_FIELD_STRING])
+        total_field_string_size = total_field_string_size + len(item[DICTIONARY_ENTRY_FIELD_STRING])
     print("Field string size consumed:", total_field_string_size)
     print('Total size:', 10 * len(schema_dictionary) + total_field_string_size)
 
@@ -369,22 +373,23 @@ def to_format(format):
         return '0x0F'
 
 
+# TODO
 def generate_byte_array(schema_dictionary):
     # first entry is the schema entity
-    print('const uint8', schema_dictionary[0][DICTIONARY_FIELD_STRING].split('.')[1]
+    print('const uint8', schema_dictionary[0][DICTIONARY_ENTRY_FIELD_STRING].split('.')[1]
           + '_schema_dictionary[]= { 0x00, 0x00')
 
     iter_schema = iter(schema_dictionary)
     next(iter_schema)  # skip the first entry since it is the schema entity
     for item in iter_schema:
-        print(to_format(item[DICTIONARY_FORMAT]))
+        print(to_format(item[DICTIONARY_ENTRY_FORMAT]))
         pass
 
 
 def find_item_offset(schema_dictionary, item_to_find):
     offset = 0
     for index, item in enumerate(schema_dictionary):
-        if item[DICTIONARY_FIELD_STRING] == item_to_find:
+        if item[DICTIONARY_ENTRY_FIELD_STRING] == item_to_find:
             offset = index
             break
 
@@ -421,7 +426,7 @@ if __name__ == '__main__':
         source = args.schemaDir + '/' + 'metadata/' + args.schemaFilename
     elif args.source == 'remote':
         source = args.schemaURL
-    add_namespaces(source, doc_list, args.source)
+    add_namespaces(source, doc_list)
 
     entity = args.entity
     if args.verbose:
@@ -441,27 +446,27 @@ if __name__ == '__main__':
             tmp_dictionary = schema_dictionary.copy()
             was_expanded = False
             for index, item in enumerate(schema_dictionary):
-                if (type(item[DICTIONARY_OFFSET]) == str and item[DICTIONARY_OFFSET] != ''
-                    and (item[DICTIONARY_OFFSET] in entity_repo)) \
-                        and (item[DICTIONARY_FORMAT] == 'Set' or item[DICTIONARY_FORMAT] == 'Enum'
-                             or item[DICTIONARY_FORMAT] == 'Array'):
+                if (type(item[DICTIONARY_ENTRY_OFFSET]) == str and item[DICTIONARY_ENTRY_OFFSET] != ''
+                    and (item[DICTIONARY_ENTRY_OFFSET] in entity_repo)) \
+                        and (item[DICTIONARY_ENTRY_FORMAT] == 'Set' or item[DICTIONARY_ENTRY_FORMAT] == 'Enum'
+                             or item[DICTIONARY_ENTRY_FORMAT] == 'Array'):
 
                     # optimization: check to see if dictionary already contains an entry for the complex type/enum.
                     # If yes, then just reuse it instead of creating a set of entries.
                     offset = 0
                     if OPTIMIZE_REDUNDANT_DICTIONARY_ENTRIES:
-                        offset = find_item_offset(schema_dictionary, item[DICTIONARY_OFFSET])
+                        offset = find_item_offset(schema_dictionary, item[DICTIONARY_ENTRY_OFFSET])
 
                     if offset == 0:
                         offset = len(tmp_dictionary)
-                        item_type = entity_repo[item[DICTIONARY_OFFSET]][ENTITY_REPO_TUPLE_TYPE_INDEX]
+                        item_type = entity_repo[item[DICTIONARY_ENTRY_OFFSET]][ENTITY_REPO_TUPLE_TYPE_INDEX]
                         next_offset = offset + 1
                         # if there are no properties for an entity (e.g. oem), then leave a blank offset
-                        if len(entity_repo[item[DICTIONARY_OFFSET]][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]) == 0:
+                        if len(entity_repo[item[DICTIONARY_ENTRY_OFFSET]][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]) == 0:
                             next_offset = ''
-                        tmp_dictionary.append([offset, item_type, 0, item[DICTIONARY_OFFSET], next_offset])
-                        add_dictionary_entries(tmp_dictionary, entity_repo, item[DICTIONARY_OFFSET])
-                    tmp_dictionary[index][DICTIONARY_OFFSET] = offset
+                        tmp_dictionary.append([offset, item_type, 0, item[DICTIONARY_ENTRY_OFFSET], next_offset])
+                        add_dictionary_entries(tmp_dictionary, entity_repo, item[DICTIONARY_ENTRY_OFFSET])
+                    tmp_dictionary[index][DICTIONARY_ENTRY_OFFSET] = offset
                     was_expanded = True
                     break
             if was_expanded:
