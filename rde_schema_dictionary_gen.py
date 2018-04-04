@@ -8,6 +8,7 @@ import pprint
 from tabulate import tabulate
 import urllib.request
 import sys
+from collections import Counter
 
 includeNamespaces = {}
 entityToPropertyMap = {}
@@ -63,7 +64,7 @@ def get_properties(some_type):
         is_auto_expand_refs = not is_auto_expand
 
         m = re.compile('Edm\.(.*)').match(property_type)
-        if m:  # primitive?
+        if m:  # primitive type?
             primitive_type = m.group(1)
             if primitive_type == "DateTimeOffset" or primitive_type == "Duration" or primitive_type == "TimeOfDay" \
                     or primitive_type == "Guid":
@@ -72,7 +73,7 @@ def get_properties(some_type):
                     (primitive_type == "Int64") or (primitive_type == "Decimal")):
                 primitive_type = 'Integer'
             properties.append([property_name, primitive_type, ''])
-        else:  # complex
+        else:  # complex type
             complex_type = None
             is_array = re.compile('Collection\((.*?)\)').match(property_type)
             if is_array:
@@ -100,7 +101,7 @@ def get_properties(some_type):
                     properties.append([property_name, 'Enum', strip_version(property_type)])
                 elif complex_type.tag == COMPLEX_TYPE or complex_type.tag == ENTITY_TYPE:
                     if is_auto_expand_refs:
-                        properties.append([property_name, 'Set', ''])
+                        properties.append([property_name, 'SchemaLink', ''])
                     else:
                         properties.append([property_name, 'Set', strip_version(property_type)])
                 elif complex_type.tag == TYPE_DEFINITION:
@@ -213,11 +214,22 @@ def add_namespaces(source, doc_list, local_or_remote):
             if local_or_remote == 'remote':
                 dependent_source = ref.get('Uri')
             else:
-                dependent_source = args.schemaDir + '/' + extract_doc_name_from_url(ref.get('Uri'))
+                dependent_source = args.schemaDir + '/metadata/' + extract_doc_name_from_url(ref.get('Uri'))
                 if os.path.exists(dependent_source) is False:
                     continue
                 print(dependent_source)
             add_namespaces(dependent_source, doc_list, local_or_remote)
+
+
+def find_enum(key, dictionary):
+    for k, v in dictionary.items():
+        if k == key and "enum" in v:
+            return v
+        elif isinstance(v, dict):
+            f = find_enum(key, v)
+            if f is not None and "enum" in f:
+                return f
+    return None
 
 
 def add_all_entity_and_complex_types(doc_list):
@@ -232,7 +244,23 @@ def add_all_entity_and_complex_types(doc_list):
     for key in entity_repo:
         for seq, item in enumerate(entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
             item.insert(0, seq)
+        # TODO: Fix enums
+        if entity_repo[key][ENTITY_REPO_TUPLE_TYPE_INDEX] == 'Enum':
+            # build a list of json schema files that need to be scanned for the enum in question
+            [base_filename, enum_name] = key.split('.')
+            print("Need to look at json schema to fix enums for", key, base_filename)
+            enum_values = []
+            for file in os.listdir(args.schemaDir + '/json-schema/'):
+                if file.startswith(base_filename + '.'):
+                    json_schema = json.load(open(args.schemaDir + '/json-schema/' + file))
+                    # search json schema for enum
 
+                    print("Looking for", enum_name,"in", args.schemaDir + '/json-schema/' + file)
+                    json_enum = find_enum(enum_name, json_schema)
+                    if json_enum is not None:
+                        print(json_enum["enum"])
+                        enum_values = enum_values + list((Counter(json_enum["enum"]) - Counter(enum_values)).elements())
+                        print(enum_values)
     return entity_repo
 
 
@@ -383,7 +411,7 @@ if __name__ == '__main__':
     doc_list = {}
     source = ''
     if args.source == 'local':
-        source = args.schemaDir + '/' + args.schemaFilename
+        source = args.schemaDir + '/' + 'metadata/' + args.schemaFilename
     elif args.source == 'remote':
         source = args.schemaURL
     add_namespaces(source, doc_list, args.source)
