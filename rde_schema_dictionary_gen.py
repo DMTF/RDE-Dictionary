@@ -242,8 +242,6 @@ def add_all_entity_and_complex_types(doc_list):
 
     # second pass, add seq numbers
     for key in entity_repo:
-        for seq, item in enumerate(entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
-            item.insert(0, seq)
         # TODO: Fix enums
         if entity_repo[key][ENTITY_REPO_TUPLE_TYPE_INDEX] == 'Enum':
             # build a list of json schema files that need to be scanned for the enum in question
@@ -261,6 +259,15 @@ def add_all_entity_and_complex_types(doc_list):
                         print(json_enum["enum"])
                         enum_values = enum_values + list((Counter(json_enum["enum"]) - Counter(enum_values)).elements())
                         print(enum_values)
+
+            if len(enum_values):
+                #entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX] = [[enum] for enum in enum_values]
+                del entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX][:]
+                entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].extend([[enum] for enum in enum_values])
+
+        for seq, item in enumerate(entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
+            item.insert(0, seq)
+
     return entity_repo
 
 
