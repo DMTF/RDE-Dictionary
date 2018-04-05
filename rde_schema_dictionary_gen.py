@@ -1,3 +1,14 @@
+
+"""
+RDE Dictionary Builder
+
+File : rde-dictionary-builder.py
+
+Brief : This file contains the definitions and functionalities for generating
+        a RDE schema dictionary from a set of standard Redfish CSDL and JSON Schema
+        files
+"""
+
 from lxml import etree
 import argparse
 import json
@@ -10,21 +21,26 @@ import urllib.request
 import sys
 from collections import Counter
 
+# dict to build a list of namespaces that will be used to build the d
 includeNamespaces = {}
-entityToPropertyMap = {}
-ENUM_TYPE = '{http://docs.oasis-open.org/odata/ns/edm}EnumType'
-COMPLEX_TYPE = '{http://docs.oasis-open.org/odata/ns/edm}ComplexType'
-TYPE_DEFINITION = '{http://docs.oasis-open.org/odata/ns/edm}TypeDefinition'
-ENTITY_TYPE = '{http://docs.oasis-open.org/odata/ns/edm}EntityType'
-NAVIGATION_PROPERTY = '{http://docs.oasis-open.org/odata/ns/edm}NavigationProperty'
-ACTION_TYPE = '{http://docs.oasis-open.org/odata/ns/edm}Action'
-ALL_NAMESPACES = {'edm': 'http://docs.oasis-open.org/odata/ns/edm', 'edmx': 'http://docs.oasis-open.org/odata/ns/edmx'}
 
+# OData types
+ODATA_ENUM_TYPE = '{http://docs.oasis-open.org/odata/ns/edm}EnumType'
+ODATA_COMPLEX_TYPE = '{http://docs.oasis-open.org/odata/ns/edm}ComplexType'
+ODATA_TYPE_DEFINITION = '{http://docs.oasis-open.org/odata/ns/edm}TypeDefinition'
+ODATA_ENTITY_TYPE = '{http://docs.oasis-open.org/odata/ns/edm}EntityType'
+ODATA_NAVIGATION_PROPERTY = '{http://docs.oasis-open.org/odata/ns/edm}NavigationProperty'
+ODATA_ACTION_TYPE = '{http://docs.oasis-open.org/odata/ns/edm}Action'
+ODATA_ALL_NAMESPACES = {'edm': 'http://docs.oasis-open.org/odata/ns/edm', 'edmx': 'http://docs.oasis-open.org/odata/ns/edmx'}
+
+# Optimization: check to see if dictionary already contains an entry for the complex type/enum.
+# If yes, then just reuse it instead of creating a new set of entries.
 OPTIMIZE_REDUNDANT_DICTIONARY_ENTRIES = True
 
+# Dictionary indices
 DICTIONARY_ENTRY_INDEX = 0
-DICTIONARY_ENTRY_FORMAT = 1
-DICTIONARY_ENTRY_SEQUENCE_NUMBER = 2
+DICTIONARY_ENTRY_SEQUENCE_NUMBER = 1
+DICTIONARY_ENTRY_FORMAT = 2
 DICTIONARY_ENTRY_FIELD_STRING = 3
 DICTIONARY_ENTRY_OFFSET = 4
 
@@ -32,7 +48,15 @@ DICTIONARY_ENTRY_OFFSET = 4
 ENTITY_REPO_TUPLE_TYPE_INDEX = 0
 ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX = 1
 
+
 def get_base_properties(entity_type):
+    """
+    Constructs a list of base properties that are inherited by entity_type
+
+    Args:
+        entity_type: The EntityType or ComplexType whose base properties need to be constructed
+    """
+
     properties = []
     if entity_type.get('BaseType') is not None:
         base_type = entity_type.get('BaseType')
@@ -51,6 +75,13 @@ def get_base_properties(entity_type):
 
 
 def strip_version(val):
+    """
+    Removes version information and returns the Namespace.EntitytypeName
+
+    Args:
+        val: string in the format of Namespace.v_Major_Minor_Errata.EntityName
+    """
+
     m = re.compile('(\w+)\.v.*?\.(\w+)').search(val)
     if m:
         return m.group(1) + '.' + m.group(2)
@@ -60,16 +91,16 @@ def strip_version(val):
 def get_properties(some_type):
     properties = []
     property_elements = some_type.xpath('descendant-or-self::edm:Property | edm:NavigationProperty',
-                                        namespaces=ALL_NAMESPACES)
+                                        namespaces=ODATA_ALL_NAMESPACES)
     for property_element in property_elements:
         property_name = property_element.get('Name')
 
         property_type = property_element.get('Type')
 
-        is_auto_expand = property_element.tag != NAVIGATION_PROPERTY \
-            or (property_element.tag == NAVIGATION_PROPERTY
+        is_auto_expand = property_element.tag != ODATA_NAVIGATION_PROPERTY \
+            or (property_element.tag == ODATA_NAVIGATION_PROPERTY
                 and len(property_element.xpath('child::edm:Annotation[@Term=\'OData.AutoExpand\']',
-                                               namespaces=ALL_NAMESPACES)))
+                                               namespaces=ODATA_ALL_NAMESPACES)))
         is_auto_expand_refs = not is_auto_expand
 
         m = re.compile('Edm\.(.*)').match(property_type)
@@ -99,21 +130,21 @@ def get_properties(some_type):
                         properties.append([property_name, 'Array', strip_version(is_array.group(1)), 'AutoExpand'])
 
                 # add the @count property for navigation properties that are arrays
-                if property_element.tag == NAVIGATION_PROPERTY:
+                if property_element.tag == ODATA_NAVIGATION_PROPERTY:
                     properties.append([property_name+'@odata.count', 'Integer', ''])
 
             else:
                 complex_type = find_element_from_type(property_type)
 
             if complex_type is not None:
-                if complex_type.tag == ENUM_TYPE:
+                if complex_type.tag == ODATA_ENUM_TYPE:
                     properties.append([property_name, 'Enum', strip_version(property_type)])
-                elif complex_type.tag == COMPLEX_TYPE or complex_type.tag == ENTITY_TYPE:
+                elif complex_type.tag == ODATA_COMPLEX_TYPE or complex_type.tag == ODATA_ENTITY_TYPE:
                     if is_auto_expand_refs:
-                        properties.append([property_name, 'SchemaLink', ''])
+                        properties.append([property_name, 'ResourceLink', ''])
                     else:
                         properties.append([property_name, 'Set', strip_version(property_type)])
-                elif complex_type.tag == TYPE_DEFINITION:
+                elif complex_type.tag == ODATA_TYPE_DEFINITION:
                     assert(re.compile('Edm\..*').match(complex_type.get('UnderlyingType')))
                     m = re.compile('Edm\.(.*)').match(complex_type.get('UnderlyingType'))
                     properties.append([property_name, m.group(1), ''])
@@ -125,7 +156,7 @@ def get_properties(some_type):
 
 
 def get_namespace(entity_type):
-    namespace = entity_type.xpath('parent::edm:Schema', namespaces=ALL_NAMESPACES)[0].get('Namespace')
+    namespace = entity_type.xpath('parent::edm:Schema', namespaces=ODATA_ALL_NAMESPACES)[0].get('Namespace')
     if namespace.find('.') != -1:
         m = re.search('(\w*?)\.v.*', namespace)
         if m:
@@ -147,10 +178,8 @@ def extract_doc_name_from_url(url):
         return ''
 
 
-
-
 def add_entity_and_complex_types(doc, entity_repo):
-    for entityType in doc.xpath('//edm:EntityType | //edm:ComplexType', namespaces=ALL_NAMESPACES):
+    for entityType in doc.xpath('//edm:EntityType | //edm:ComplexType', namespaces=ODATA_ALL_NAMESPACES):
         properties = []
         if is_abstract(entityType) is not True:
             if is_parent_abstract(entityType):
@@ -169,17 +198,17 @@ def add_entity_and_complex_types(doc, entity_repo):
                  if item not in entity_repo[entity_type_name][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]]
             )
 
-    for enum_type in doc.xpath('//edm:EnumType', namespaces=ALL_NAMESPACES):
+    for enum_type in doc.xpath('//edm:EnumType', namespaces=ODATA_ALL_NAMESPACES):
         enum_type_name = get_qualified_entity_name(enum_type)
         if enum_type_name not in entity_repo:
             entity_repo[enum_type_name] = ('Enum', [])
         entity_repo[enum_type_name][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].extend(
-            [[enum] for enum in enum_type.xpath('child::edm:Member/@Name', namespaces=ALL_NAMESPACES)
+            [[enum] for enum in enum_type.xpath('child::edm:Member/@Name', namespaces=ODATA_ALL_NAMESPACES)
              if [enum] not in entity_repo[enum_type_name][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]]
         )
 
     # TODO: fix actions
-    for actionType in doc.xpath('//edm:Action', namespaces=ALL_NAMESPACES):
+    for actionType in doc.xpath('//edm:Action', namespaces=ODATA_ALL_NAMESPACES):
         print("Action: ", actionType.get('Name'))
         for child in actionType:
             print('    ', child.tag)
@@ -210,14 +239,14 @@ def add_namespaces(source, doc_list):
         doc = etree.fromstring(schema_string)
         doc_list[doc_name] = doc
         # load all namespaces in the current doc
-        for namespace in doc.xpath('descendant-or-self::edm:Schema[@Namespace]', namespaces=ALL_NAMESPACES):
+        for namespace in doc.xpath('descendant-or-self::edm:Schema[@Namespace]', namespaces=ODATA_ALL_NAMESPACES):
             if namespace.get('Namespace') not in includeNamespaces:
                 includeNamespaces[namespace.get('Namespace')] = namespace
             else:
                 return
 
         # bring in all dependent documents and their corresponding namespaces
-        for ref in doc.xpath('descendant-or-self::edmx:Reference', namespaces=ALL_NAMESPACES):
+        for ref in doc.xpath('descendant-or-self::edmx:Reference', namespaces=ODATA_ALL_NAMESPACES):
             if args.source == 'remote':
                 dependent_source = ref.get('Uri')
             else:
@@ -291,7 +320,7 @@ def get_base_type(child):
         return includeNamespaces[base_namespace].xpath(
             'child::edm:EntityType[@Name=\'%s\'] | child::edm:ComplexType[@Name=\'%s\']' % (base_entity_name,
                                                                                             base_entity_name),
-            namespaces=ALL_NAMESPACES)[0]
+            namespaces=ODATA_ALL_NAMESPACES)[0]
 
 
 def is_parent_abstract(entity_type):
@@ -311,7 +340,7 @@ def find_element_from_type(type):
     # TODO assert here instead of returning None to let users know that all referenced schema files are not available
     if namespace in includeNamespaces:
         return includeNamespaces[namespace].xpath('child::edm:*[@Name=\'%s\']' % entity_name,
-                                                  namespaces=ALL_NAMESPACES)[0]
+                                                  namespaces=ODATA_ALL_NAMESPACES)[0]
     return None
 
 
@@ -332,18 +361,21 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity):
         for index, property in enumerate(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
             if entity_type == 'Enum':  # this is an enum
                 schema_dictionary.append(
-                    [index + start, 'String', property[SEQ_NUMBER], property[FIELD_STRING], ''])
+                    #[index + start, 'String', property[SEQ_NUMBER], property[FIELD_STRING], ''])
+                    [index + start, property[SEQ_NUMBER], 'String', property[FIELD_STRING], ''])
+
             elif property[TYPE] == 'Array':  # this is an array
                 # TODO fix == 5 by making AutoExpand also 4 elements
                 if len(property) == 5 and property[EXPAND] == 'AutoExpand':
                     schema_dictionary.append(
-                        [index + start, property[TYPE], property[SEQ_NUMBER], property[FIELD_STRING], property[OFFSET]])
+                        [index + start, property[SEQ_NUMBER], property[TYPE], property[FIELD_STRING], property[OFFSET]])
                 else:
                     schema_dictionary.append(
-                        [index + start, property[TYPE], property[SEQ_NUMBER], property[FIELD_STRING], property[OFFSET]])
+                        [index + start, property[SEQ_NUMBER], property[TYPE], property[FIELD_STRING], property[OFFSET]])
             else:
-                schema_dictionary.append([index + start, property[TYPE], property[SEQ_NUMBER], property[FIELD_STRING],
+                schema_dictionary.append([index + start, property[SEQ_NUMBER], property[TYPE], property[FIELD_STRING],
                                           property[OFFSET]])
+
 
 def print_dictionary_summary(schema_dictionary):
     print("Total Entries:", len(schema_dictionary))
@@ -369,7 +401,7 @@ def to_format(format):
         return '0x05'
     elif format == 'Boolean':
         return '0x07'
-    elif format == 'SchemaLink':
+    elif format == 'ResourceLink':
         return '0x0F'
 
 
@@ -438,7 +470,7 @@ if __name__ == '__main__':
 
     # search for entity and build dictionary
     if entity in entity_repo:
-        schema_dictionary = [[0, 'Set', 0, entity, 1]]
+        schema_dictionary = [[0, 0, 'Set', entity, 1]]
         add_dictionary_entries(schema_dictionary, entity_repo, entity)
 
         can_expand = True
@@ -452,7 +484,7 @@ if __name__ == '__main__':
                              or item[DICTIONARY_ENTRY_FORMAT] == 'Array'):
 
                     # optimization: check to see if dictionary already contains an entry for the complex type/enum.
-                    # If yes, then just reuse it instead of creating a set of entries.
+                    # If yes, then just reuse it instead of creating a new set of entries.
                     offset = 0
                     if OPTIMIZE_REDUNDANT_DICTIONARY_ENTRIES:
                         offset = find_item_offset(schema_dictionary, item[DICTIONARY_ENTRY_OFFSET])
@@ -464,7 +496,7 @@ if __name__ == '__main__':
                         # if there are no properties for an entity (e.g. oem), then leave a blank offset
                         if len(entity_repo[item[DICTIONARY_ENTRY_OFFSET]][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]) == 0:
                             next_offset = ''
-                        tmp_dictionary.append([offset, item_type, 0, item[DICTIONARY_ENTRY_OFFSET], next_offset])
+                        tmp_dictionary.append([offset, 0, item_type, item[DICTIONARY_ENTRY_OFFSET], next_offset])
                         add_dictionary_entries(tmp_dictionary, entity_repo, item[DICTIONARY_ENTRY_OFFSET])
                     tmp_dictionary[index][DICTIONARY_ENTRY_OFFSET] = offset
                     was_expanded = True
@@ -481,13 +513,14 @@ if __name__ == '__main__':
             # )
 
         print_table_data(
-            [["Entry", "Format", "Sequence#", "Field String", "Offset"]]
+            [["Row", "Sequence#", "Format", "Field String", "Offset"]]
             +
             schema_dictionary
         )
 
         print_dictionary_summary(schema_dictionary)
 
+        # TODO: Generate
         # generate_byte_array(schema_dictionary)
 
         if args.outputFile:
