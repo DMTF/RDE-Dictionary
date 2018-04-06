@@ -42,7 +42,8 @@ DICTIONARY_ENTRY_INDEX = 0
 DICTIONARY_ENTRY_SEQUENCE_NUMBER = 1
 DICTIONARY_ENTRY_FORMAT = 2
 DICTIONARY_ENTRY_FIELD_STRING = 3
-DICTIONARY_ENTRY_OFFSET = 4
+DICTIONARY_ENTRY_CHILD_COUNT = 4
+DICTIONARY_ENTRY_OFFSET = 5
 
 
 ENTITY_REPO_TUPLE_TYPE_INDEX = 0
@@ -358,23 +359,21 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity):
     if entity in entity_repo:
         entity_type = entity_repo[entity][ENTITY_REPO_TUPLE_TYPE_INDEX]
         start = len(schema_dictionary)
+        index = 0
         for index, property in enumerate(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
             if entity_type == 'Enum':  # this is an enum
                 schema_dictionary.append(
-                    #[index + start, 'String', property[SEQ_NUMBER], property[FIELD_STRING], ''])
-                    [index + start, property[SEQ_NUMBER], 'String', property[FIELD_STRING], ''])
+                    [index + start, property[SEQ_NUMBER], 'String', property[FIELD_STRING], 0, ''])
 
             elif property[TYPE] == 'Array':  # this is an array
-                # TODO fix == 5 by making AutoExpand also 4 elements
-                if len(property) == 5 and property[EXPAND] == 'AutoExpand':
                     schema_dictionary.append(
-                        [index + start, property[SEQ_NUMBER], property[TYPE], property[FIELD_STRING], property[OFFSET]])
-                else:
-                    schema_dictionary.append(
-                        [index + start, property[SEQ_NUMBER], property[TYPE], property[FIELD_STRING], property[OFFSET]])
+                        [index + start, property[SEQ_NUMBER], property[TYPE], property[FIELD_STRING], 0,
+                         property[OFFSET]])
             else:
                 schema_dictionary.append([index + start, property[SEQ_NUMBER], property[TYPE], property[FIELD_STRING],
-                                          property[OFFSET]])
+                                          0, property[OFFSET]])
+        return index + 1
+    return 0
 
 
 def print_dictionary_summary(schema_dictionary):
@@ -428,6 +427,24 @@ def find_item_offset(schema_dictionary, item_to_find):
     return offset
 
 
+def add_odata_annotations(annotation_dictionary):
+    pass
+
+
+def add_message_annotations(annotation_dictionary):
+    pass
+
+
+def add_redfish_annotations(annotation_dictionary):
+    pass
+
+
+def generate_annotation_dictionary():
+    annotation_dictionary = {}
+    add_odata_annotations(annotation_dictionary)
+    add_message_annotations(annotation_dictionary)
+    add_redfish_annotations(annotation_dictionary)
+
 if __name__ == '__main__':
     # rde_schema_dictionary parse --schemaDir=directory --schemaFilename=filename
     parser = argparse.ArgumentParser()
@@ -470,8 +487,9 @@ if __name__ == '__main__':
 
     # search for entity and build dictionary
     if entity in entity_repo:
-        schema_dictionary = [[0, 0, 'Set', entity, 1]]
-        add_dictionary_entries(schema_dictionary, entity_repo, entity)
+        schema_dictionary = [[0, 0, 'Set', entity, 0, 1]]
+        num_entries = add_dictionary_entries(schema_dictionary, entity_repo, entity)
+        schema_dictionary[0][DICTIONARY_ENTRY_CHILD_COUNT] = num_entries
 
         can_expand = True
         while can_expand:
@@ -496,8 +514,10 @@ if __name__ == '__main__':
                         # if there are no properties for an entity (e.g. oem), then leave a blank offset
                         if len(entity_repo[item[DICTIONARY_ENTRY_OFFSET]][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]) == 0:
                             next_offset = ''
-                        tmp_dictionary.append([offset, 0, item_type, item[DICTIONARY_ENTRY_OFFSET], next_offset])
-                        add_dictionary_entries(tmp_dictionary, entity_repo, item[DICTIONARY_ENTRY_OFFSET])
+                        tmp_dictionary.append([offset, 0, item_type, item[DICTIONARY_ENTRY_OFFSET], 0, next_offset])
+                        update_offset = len(tmp_dictionary) - 1
+                        num_entries = add_dictionary_entries(tmp_dictionary, entity_repo, item[DICTIONARY_ENTRY_OFFSET])
+                        tmp_dictionary[update_offset][DICTIONARY_ENTRY_CHILD_COUNT] = num_entries
                     tmp_dictionary[index][DICTIONARY_ENTRY_OFFSET] = offset
                     was_expanded = True
                     break
@@ -513,7 +533,7 @@ if __name__ == '__main__':
             # )
 
         print_table_data(
-            [["Row", "Sequence#", "Format", "Field String", "Offset"]]
+            [["Row", "Sequence#", "Format", "Field String", "Child Count", "Offset"]]
             +
             schema_dictionary
         )
