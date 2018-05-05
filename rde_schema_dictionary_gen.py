@@ -89,6 +89,20 @@ def strip_version(val):
     return val
 
 
+def get_primitive_type(property_type):
+    m = re.compile('Edm\.(.*)').match(property_type)
+    if m:  # primitive type?
+        primitive_type = m.group(1)
+        if primitive_type == "DateTimeOffset" or primitive_type == "Duration" or primitive_type == "TimeOfDay" \
+                or primitive_type == "Guid":
+            primitive_type = 'String'
+        if ((primitive_type == "SByte") or (primitive_type == "Int16") or (primitive_type == "Int32") or
+                (primitive_type == "Int64") or (primitive_type == "Decimal")):
+            primitive_type = 'Integer'
+        return primitive_type
+    return ''
+
+
 def get_properties(some_type, path='descendant-or-self::edm:Property | edm:NavigationProperty'):
     properties = []
     property_elements = some_type.xpath(path, namespaces=ODATA_ALL_NAMESPACES)
@@ -103,15 +117,8 @@ def get_properties(some_type, path='descendant-or-self::edm:Property | edm:Navig
                                                namespaces=ODATA_ALL_NAMESPACES)))
         is_auto_expand_refs = not is_auto_expand
 
-        m = re.compile('Edm\.(.*)').match(property_type)
-        if m:  # primitive type?
-            primitive_type = m.group(1)
-            if primitive_type == "DateTimeOffset" or primitive_type == "Duration" or primitive_type == "TimeOfDay" \
-                    or primitive_type == "Guid":
-                primitive_type = 'String'
-            if ((primitive_type == "SByte") or (primitive_type == "Int16") or (primitive_type == "Int32") or
-                    (primitive_type == "Int64") or (primitive_type == "Decimal")):
-                primitive_type = 'Integer'
+        primitive_type = get_primitive_type(property_type)
+        if primitive_type != '':  # primitive type?
             properties.append([property_name, primitive_type, ''])
         else:  # complex type
             complex_type = None
@@ -128,10 +135,6 @@ def get_properties(some_type, path='descendant-or-self::edm:Property | edm:Navig
                         properties.append([property_name, 'Array', array_type, ''])
                     else:
                         properties.append([property_name, 'Array', strip_version(is_array.group(1)), 'AutoExpand'])
-
-                # add the @count property for navigation properties that are arrays
-                #if property_element.tag == ODATA_NAVIGATION_PROPERTY:
-                #    properties.append([property_name+'@odata.count', 'Integer', ''])
 
             else:
                 complex_type = find_element_from_type(property_type)
@@ -407,8 +410,11 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity):
     else:
         #  Add a simple entry
         start = len(schema_dictionary)
-        schema_dictionary.append([start, 0, entity, '', 0, ''])
-        print("Over Here")
+        primitive_type = get_primitive_type(entity)
+        if primitive_type != '':
+            schema_dictionary.append([start, 0, primitive_type, '', 0, ''])
+        else:
+            schema_dictionary.append([start, 0, entity, '', 0, ''])
         return 1
     return 0
 
@@ -540,26 +546,29 @@ ANNOTATION_DICTIONARY_RESERVED_ENTRY = 4
 def add_odata_annotations(annotation_dictionary, odata_annotation_location):
     json_schema = json.load(open(odata_annotation_location))
     offset = len(annotation_dictionary)
-    sequence_start = offset - 5
+    count = 0
     for k, v in json_schema["definitions"].items():
         if args.verbose:
             print(k)
             print(v)
 
-        format = ''
+        bej_format = ''
         json_format = v['type']
         if json_format == 'string':
-            format = 'String'
+            bej_format = 'String'
         elif json_format == 'number':
-            format = 'Integer'
+            bej_format = 'Integer'
         elif json_format == 'object':
             # TODO expand object
-            format = 'Set'
+            bej_format = 'Set'
         else:
             print('Unknown format')
 
-        annotation_dictionary.append([offset, offset - 5, format, k, 0, 0])
+        annotation_dictionary.append([offset, offset - 5, bej_format, k, 0, 0])
         offset = offset + 1
+        count = count + 1
+
+    return count
 
 
 def add_message_annotations(annotation_dictionary):
@@ -578,7 +587,8 @@ def generate_annotation_dictionary():
         annotation_dictionary.append([4, 0, "Set", "reserved", 0, ''])
 
         odata_annotation_location = args.schemaDir + '/json-schema/' + 'odata.v4_0_2.json'
-        add_odata_annotations(annotation_dictionary, odata_annotation_location)
+        annotation_dictionary[1][DICTIONARY_ENTRY_CHILD_COUNT] = \
+            add_odata_annotations(annotation_dictionary, odata_annotation_location)
 
         annotation_dictionary = generate_dictionary(annotation_dictionary, False)
 
@@ -626,8 +636,8 @@ if __name__ == '__main__':
         pprint.PrettyPrinter(indent=3).pprint(doc_list)
 
     entity_repo = add_all_entity_and_complex_types(doc_list)
-    if args.verbose:
-        pprint.PrettyPrinter(indent=3).pprint(entity_repo)
+    #if args.verbose:
+    pprint.PrettyPrinter(indent=3).pprint(entity_repo)
 
     # search for entity and build dictionary
     if entity in entity_repo:
@@ -644,6 +654,7 @@ if __name__ == '__main__':
 
         print_dictionary_summary(schema_dictionary)
 
+        entity_offset_map = {}
         annotation_dictionary = generate_annotation_dictionary()
         print_table_data(
             [["Row", "Sequence#", "Format", "Field String", "Child Count", "Offset"]]
