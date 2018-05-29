@@ -320,8 +320,7 @@ def fix_enums(entity_repo, key):
             entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].extend([[enum] for enum in enum_values])
 
 
-def add_all_entity_and_complex_types(doc_list):
-    entity_repo = {}
+def add_all_entity_and_complex_types(doc_list, entity_repo):
     for key in doc_list:
         add_entity_and_complex_types(doc_list[key], entity_repo)
         add_annotation_terms(doc_list[key], entity_repo)
@@ -338,8 +337,6 @@ def add_all_entity_and_complex_types(doc_list):
 
         for seq, item in enumerate(entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
             item.insert(0, seq)
-
-    return entity_repo
 
 
 def get_base_type(child):
@@ -378,12 +375,13 @@ def print_table_data(data):
     print(tabulate(data, headers="firstrow", tablefmt="grid"))
 
 
+SEQ_NUMBER = 0
+FIELD_STRING = 1
+TYPE = 2
+OFFSET = 3
+EXPAND = 4
+
 def add_dictionary_entries(schema_dictionary, entity_repo, entity):
-    SEQ_NUMBER = 0
-    FIELD_STRING = 1
-    TYPE = 2
-    OFFSET = 3
-    EXPAND = 4
 
     if (entity in entity_repo):
         entity_type = entity_repo[entity][ENTITY_REPO_TUPLE_TYPE_INDEX]
@@ -520,11 +518,11 @@ def generate_dictionary(dictionary, optimize_duplicate_items=True):
                 break
         if was_expanded:
             dictionary = tmp_dictionary.copy()
-            print_table_data(
-                [["Row", "Sequence#", "Format", "Field String", "Child Count", "Offset"]]
-                +
-                dictionary
-            )
+            # print_table_data(
+            #     [["Row", "Sequence#", "Format", "Field String", "Child Count", "Offset"]]
+            #     +
+            #     dictionary
+            # )
             print(entity_offset_map)
 
         else:
@@ -614,6 +612,8 @@ if __name__ == '__main__':
     local_parser.add_argument('--schemaDir', type=str, required=True)
     local_parser.add_argument('--schemaFilename', type=str, required=True)
     local_parser.add_argument('--entity', type=str, required=True)
+    local_parser.add_argument('--oemSchemaFilenames', nargs='*', type=str, required=False)
+    local_parser.add_argument('--oemEntities', nargs='*', type=str, required=False)
     local_parser.add_argument('--outputFile', type=str, required=False)
 
     args = parser.parse_args()
@@ -625,19 +625,39 @@ if __name__ == '__main__':
     # bring in all dependent documents and their corresponding namespaces
     doc_list = {}
     source = ''
+    oemSources = []
     if args.source == 'local':
         source = args.schemaDir + '/' + 'metadata/' + args.schemaFilename
+        if args.oemSchemaFilenames:
+            for schemaFilename in args.oemSchemaFilenames:
+                oemSources.append(args.schemaDir + '/' + 'metadata/' + schemaFilename)
     elif args.source == 'remote':
         source = args.schemaURL
+
     add_namespaces(source, doc_list)
+    for oemSource in oemSources:
+        add_namespaces(oemSource, doc_list)
 
     entity = args.entity
     if args.verbose:
         pprint.PrettyPrinter(indent=3).pprint(doc_list)
 
-    entity_repo = add_all_entity_and_complex_types(doc_list)
-    #if args.verbose:
-    pprint.PrettyPrinter(indent=3).pprint(entity_repo)
+    entity_repo = {}
+    oemEntityType = entity + '.Oem'
+    # create a special entity for OEM and set the major entity's oem section to it
+    entity_repo[oemEntityType] = ('Set', [])
+    for oemEntityPair in args.oemEntities:
+        oemName, oemEntity = oemEntityPair.split('=')
+        entity_repo[oemEntityType][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].append([oemName, 'Set', oemEntity])
+
+    add_all_entity_and_complex_types(doc_list, entity_repo)
+    if args.verbose:
+        pprint.PrettyPrinter(indent=3).pprint(entity_repo)
+
+    # set the entity oem entry to the special OEM entity type
+    for property in entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]:
+        if property[FIELD_STRING] == 'Oem':
+            property[OFFSET] = oemEntityType
 
     # search for entity and build dictionary
     if entity in entity_repo:
