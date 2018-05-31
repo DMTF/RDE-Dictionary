@@ -228,14 +228,34 @@ def add_entity_and_complex_types(doc, entity_repo):
              if [enum] not in entity_repo[enum_type_name][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]]
         )
 
-    # TODO: fix actions
-    for actionType in doc.xpath('//edm:Action', namespaces=ODATA_ALL_NAMESPACES):
-        if args.verbose:
-            print("Action: ", actionType.get('Name'))
-        for child in actionType:
-            if args.verbose:
-                print('    ', child.tag)
 
+def add_actions(doc, entity_repo):
+    # Handle Actions
+    for actionType in doc.xpath('//edm:Action', namespaces=ODATA_ALL_NAMESPACES):
+        # the first parameter is the binding parameter. Skip it
+        parameters_iter = iter(actionType.xpath('child::edm:Parameter', namespaces=ODATA_ALL_NAMESPACES))
+        binding_parameter = next(parameters_iter)
+        action_entity_type = strip_version(binding_parameter.get('Type'))
+
+        if action_entity_type not in entity_repo:
+            entity_repo[action_entity_type] = ('Set', [])
+
+        entity_repo[action_entity_type][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].append([actionType.get('Name'), 'Set', get_qualified_entity_name(actionType)])
+
+        if get_qualified_entity_name(actionType) not in entity_repo:
+            entity_repo[get_qualified_entity_name(actionType)] = ('Set', [])
+
+        properties = []
+
+        for parameter in parameters_iter:
+            properties = properties + get_properties(parameter, path='descendant-or-self::edm:Parameter')
+
+        # sort and add to the map
+        # add only unique entries - this is to handle Swordfish vs Redfish conflicting schema (e.g. Volume)
+        entity_repo[get_qualified_entity_name(actionType)][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].extend(
+            [item for item in sorted(properties, key=itemgetter(0))
+             if item not in entity_repo[get_qualified_entity_name(actionType)][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]]
+        )
 
 def add_namespaces(source, doc_list):
     doc_name = source
@@ -323,6 +343,7 @@ def fix_enums(entity_repo, key):
 def add_all_entity_and_complex_types(doc_list, entity_repo):
     for key in doc_list:
         add_entity_and_complex_types(doc_list[key], entity_repo)
+        add_actions(doc_list[key], entity_repo)
         add_annotation_terms(doc_list[key], entity_repo)
 
     # add special ones for AutoExpandRefs
@@ -643,21 +664,23 @@ if __name__ == '__main__':
         pprint.PrettyPrinter(indent=3).pprint(doc_list)
 
     entity_repo = {}
-    oemEntityType = entity + '.Oem'
-    # create a special entity for OEM and set the major entity's oem section to it
-    entity_repo[oemEntityType] = ('Set', [])
-    for oemEntityPair in args.oemEntities:
-        oemName, oemEntity = oemEntityPair.split('=')
-        entity_repo[oemEntityType][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].append([oemName, 'Set', oemEntity])
+    if args.oemSchemaFilenames:
+        oemEntityType = entity + '.Oem'
+        # create a special entity for OEM and set the major entity's oem section to it
+        entity_repo[oemEntityType] = ('Set', [])
+        for oemEntityPair in args.oemEntities:
+            oemName, oemEntity = oemEntityPair.split('=')
+            entity_repo[oemEntityType][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].append([oemName, 'Set', oemEntity])
 
     add_all_entity_and_complex_types(doc_list, entity_repo)
     if args.verbose:
         pprint.PrettyPrinter(indent=3).pprint(entity_repo)
 
     # set the entity oem entry to the special OEM entity type
-    for property in entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]:
-        if property[FIELD_STRING] == 'Oem':
-            property[OFFSET] = oemEntityType
+    if args.oemSchemaFilenames:
+        for property in entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]:
+            if property[FIELD_STRING] == 'Oem':
+                property[OFFSET] = oemEntityType
 
     # search for entity and build dictionary
     if entity in entity_repo:
