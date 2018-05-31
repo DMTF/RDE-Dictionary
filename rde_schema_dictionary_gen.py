@@ -65,13 +65,6 @@ def get_base_properties(entity_type):
         properties = get_properties(base_entity)
         properties = properties + get_base_properties(base_entity)
 
-        # If the object is derived from Resource or ResourceCollection then we add the OData properties
-        #if base_type == 'Resource.v1_0_0.Resource' or base_type == 'Resource.v1_0_0.ResourceCollection':
-        #    properties.append(['@odata.context', 'String', ''])
-        #    properties.append(['@odata.id', 'String', ''])
-        #    properties.append(['@odata.type', 'String', ''])
-        #    properties.append(['@odata.etag', 'String', ''])
-
     return properties
 
 
@@ -199,6 +192,7 @@ def add_annotation_terms(doc, entity_repo):
             [item for item in sorted(terms, key=itemgetter(0))
              if item not in entity_repo[namespace_name][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]])
 
+
 def add_entity_and_complex_types(doc, entity_repo):
     for entity_type in doc.xpath('//edm:EntityType | //edm:ComplexType', namespaces=ODATA_ALL_NAMESPACES):
         properties = []
@@ -240,7 +234,8 @@ def add_actions(doc, entity_repo):
         if action_entity_type not in entity_repo:
             entity_repo[action_entity_type] = ('Set', [])
 
-        entity_repo[action_entity_type][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].append([actionType.get('Name'), 'Set', get_qualified_entity_name(actionType)])
+        entity_repo[action_entity_type][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].append(
+            [actionType.get('Name'), 'Set', get_qualified_entity_name(actionType)])
 
         if get_qualified_entity_name(actionType) not in entity_repo:
             entity_repo[get_qualified_entity_name(actionType)] = ('Set', [])
@@ -256,6 +251,7 @@ def add_actions(doc, entity_repo):
             [item for item in sorted(properties, key=itemgetter(0))
              if item not in entity_repo[get_qualified_entity_name(actionType)][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]]
         )
+
 
 def add_namespaces(source, doc_list):
     doc_name = source
@@ -403,6 +399,7 @@ TYPE = 2
 OFFSET = 3
 EXPAND = 4
 
+
 def add_dictionary_entries(schema_dictionary, entity_repo, entity):
 
     if (entity in entity_repo):
@@ -479,18 +476,15 @@ def generate_byte_array(schema_dictionary):
         print(to_format(item[DICTIONARY_ENTRY_FORMAT]))
         pass
 
+
 entity_offset_map = {}
+
+
 def find_item_offset_and_size(schema_dictionary, item_to_find):
     if item_to_find in entity_offset_map:
         return entity_offset_map[item_to_find][0];
     return 0
 
-    #for index, item in enumerate(schema_dictionary):
-    #    if item[DICTIONARY_ENTRY_FIELD_STRING] == item_to_find:
-    #        offset = index
-    #        break
-
-    #return offset
 
 def generate_dictionary(dictionary, optimize_duplicate_items=True):
     can_expand = True
@@ -539,12 +533,6 @@ def generate_dictionary(dictionary, optimize_duplicate_items=True):
                 break
         if was_expanded:
             dictionary = tmp_dictionary.copy()
-            # print_table_data(
-            #     [["Row", "Sequence#", "Format", "Field String", "Child Count", "Offset"]]
-            #     +
-            #     dictionary
-            # )
-
         else:
             can_expand = False
 
