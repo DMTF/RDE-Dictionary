@@ -269,7 +269,8 @@ def add_namespaces(source, doc_list):
             # ignore odata references
             if source.find('http://docs.oasis') == -1:
                 try:
-                    print('Opening URL', source)
+                    if args.verbose:
+                        print('Opening URL', source)
                     schema_string = urllib.request.urlopen(source).read()
                 except:
                     # skip if we cannot bring the file down
@@ -481,7 +482,6 @@ def generate_byte_array(schema_dictionary):
 entity_offset_map = {}
 def find_item_offset_and_size(schema_dictionary, item_to_find):
     if item_to_find in entity_offset_map:
-        print("Found item: ", item_to_find)
         return entity_offset_map[item_to_find][0];
     return 0
 
@@ -544,7 +544,6 @@ def generate_dictionary(dictionary, optimize_duplicate_items=True):
             #     +
             #     dictionary
             # )
-            print(entity_offset_map)
 
         else:
             can_expand = False
@@ -567,10 +566,6 @@ def add_odata_annotations(annotation_dictionary, odata_annotation_location):
     offset = len(annotation_dictionary)
     count = 0
     for k, v in json_schema["definitions"].items():
-        if args.verbose:
-            print(k)
-            print(v)
-
         bej_format = ''
         json_format = v['type']
         if json_format == 'string':
