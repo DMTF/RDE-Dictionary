@@ -202,16 +202,18 @@ def add_entity_and_complex_types(doc, entity_repo):
 
             properties = properties + get_properties(entity_type)
 
-            entity_type_name = get_qualified_entity_name(entity_type)
-            if entity_type_name not in entity_repo:
-                entity_repo[entity_type_name] = ('Set', [])
+            # add the entity only if it has at least one property
+            if len(properties):
+                entity_type_name = get_qualified_entity_name(entity_type)
+                if entity_type_name not in entity_repo:
+                    entity_repo[entity_type_name] = ('Set', [])
 
-            # sort and add to the map
-            # add only unique entries - this is to handle Swordfish vs Redfish conflicting schema (e.g. Volume)
-            entity_repo[entity_type_name][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].extend(
-                [item for item in sorted(properties, key=itemgetter(0))
-                 if item not in entity_repo[entity_type_name][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]]
-            )
+                # sort and add to the map
+                # add only unique entries - this is to handle Swordfish vs Redfish conflicting schema (e.g. Volume)
+                entity_repo[entity_type_name][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].extend(
+                    [item for item in sorted(properties, key=itemgetter(0))
+                     if item not in entity_repo[entity_type_name][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]]
+                )
 
     for enum_type in doc.xpath('//edm:EnumType', namespaces=ODATA_ALL_NAMESPACES):
         enum_type_name = get_qualified_entity_name(enum_type)
@@ -345,7 +347,7 @@ def add_all_entity_and_complex_types(doc_list, entity_repo):
 
     # add special ones for AutoExpandRefs
     #entity_repo['AutoExpandRef'] = ('Set', [['@odata.id', 'String', '']])
-    entity_repo['AutoExpandRef'] = ('Set', [['', 'Set', '']])
+    # entity_repo['AutoExpandRef'] = ('Set', [['', 'Set', '']])
 
     # second pass, add seq numbers
     for key in entity_repo:
@@ -401,14 +403,21 @@ EXPAND = 4
 
 
 def add_dictionary_entries(schema_dictionary, entity_repo, entity):
-
-    if (entity in entity_repo):
+    if entity in entity_repo:
         entity_type = entity_repo[entity][ENTITY_REPO_TUPLE_TYPE_INDEX]
         start = len(schema_dictionary)
 
         if len(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]) == 0:
-            schema_dictionary.append([start, 0, entity_type, '', 0, ''])
-            return 1
+            if entity_type not in entity_offset_map:
+                schema_dictionary.append([start, 0, entity_type, '', 0, ''])
+
+                # store off into the entity offset map to reuse for other entries that use
+                # the same entity type
+                entity_offset_map[entity_type] = (start, 0)
+            else:
+                start = entity_offset_map[entity_type][0]
+
+            return 1, start
 
         index = 0
         for index, property in enumerate(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
@@ -423,17 +432,26 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity):
             else:
                 schema_dictionary.append([index + start, property[SEQ_NUMBER], property[TYPE], property[FIELD_STRING],
                                           0, property[OFFSET]])
-        return index + 1
+        return index + 1, start
     else:
         #  Add a simple entry
         start = len(schema_dictionary)
+        simple_type = 'Set'
         primitive_type = get_primitive_type(entity)
         if primitive_type != '':
-            schema_dictionary.append([start, 0, primitive_type, '', 0, ''])
+            simple_type = primitive_type
+
+        if simple_type not in entity_offset_map:
+            schema_dictionary.append([start, 0, simple_type, '', 0, ''])
+
+            # store off into the entity offset map to reuse for other entries that use
+            # the same primitive type
+            entity_offset_map[simple_type] = (start, 0)
         else:
-            schema_dictionary.append([start, 0, entity, '', 0, ''])
-        return 1
-    return 0
+            start = entity_offset_map[simple_type][0]
+
+        return 1, start
+    return 0, 0
 
 
 def print_dictionary_summary(schema_dictionary):
@@ -515,14 +533,14 @@ def generate_dictionary(dictionary, optimize_duplicate_items=True):
                     if item_type in entity_repo:
                         item_type = entity_repo[item[DICTIONARY_ENTRY_OFFSET]][ENTITY_REPO_TUPLE_TYPE_INDEX]
 
-                    next_offset = offset + 1
+                    #next_offset = offset + 1
                     # if there are no properties for an entity (e.g. oem), then leave a blank offset
-                    if item[DICTIONARY_ENTRY_OFFSET] in entity_repo \
-                            and len(entity_repo[item[DICTIONARY_ENTRY_OFFSET]][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]) \
-                            == 0:
-                        next_offset = ''
+                    #if item[DICTIONARY_ENTRY_OFFSET] in entity_repo \
+                    #        and len(entity_repo[item[DICTIONARY_ENTRY_OFFSET]][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]) \
+                    #        == 0:
+                    #    next_offset = ''
 
-                    num_entries = add_dictionary_entries(tmp_dictionary, entity_repo, item[DICTIONARY_ENTRY_OFFSET])
+                    num_entries, offset = add_dictionary_entries(tmp_dictionary, entity_repo, item[DICTIONARY_ENTRY_OFFSET])
                     #item[DICTIONARY_ENTRY_CHILD_COUNT] = num_entries
 
                     entity_offset_map[item[DICTIONARY_ENTRY_OFFSET]] = (offset, num_entries)
@@ -573,19 +591,26 @@ def add_odata_annotations(annotation_dictionary, odata_annotation_location):
     return count
 
 
-def add_message_annotations(annotation_dictionary):
-    pass
-
+def fix_annotations_sequence_numbers(annotation_dictionary, annotation_index, stripe_factor):
+    start_of_annotation_dictionary = annotation_dictionary[annotation_index][DICTIONARY_ENTRY_OFFSET]
+    num_annotation_dictionary_entries = annotation_dictionary[annotation_index][DICTIONARY_ENTRY_CHILD_COUNT]
+    for index in range(start_of_annotation_dictionary,
+                       start_of_annotation_dictionary+num_annotation_dictionary_entries):
+        annotation_dictionary[index][DICTIONARY_ENTRY_SEQUENCE_NUMBER] = \
+            (annotation_dictionary[index][DICTIONARY_ENTRY_SEQUENCE_NUMBER] << 2) | stripe_factor
 
 def generate_annotation_dictionary():
     annotation_dictionary = []
     # TODO: Currently only local is supported
     if args.source == 'local':
         # first 4 entries
+        odata_row_index = 1
+        message_row_index = 2
+        redfish_row_index = 3
         annotation_dictionary.append([0, 0, "Set", "annotation", 4, 1])
-        annotation_dictionary.append([1, 0, "Set", "odata", 0, 5])
-        annotation_dictionary.append([2, 0, "Set", "Message", 0, 'Message'])
-        annotation_dictionary.append([3, 0, "Set", "Redfish", 0, 'Redfish'])
+        annotation_dictionary.append([odata_row_index, 0, "Set", "odata", 0, 5])
+        annotation_dictionary.append([message_row_index, 0, "Set", "Message", 0, 'Message'])
+        annotation_dictionary.append([redfish_row_index, 0, "Set", "Redfish", 0, 'Redfish'])
         annotation_dictionary.append([4, 0, "Set", "reserved", 0, ''])
 
         odata_annotation_location = args.schemaDir + '/json-schema/' + 'odata.v4_0_2.json'
@@ -594,9 +619,12 @@ def generate_annotation_dictionary():
 
         annotation_dictionary = generate_dictionary(annotation_dictionary, False)
 
-        add_message_annotations(annotation_dictionary)
-
-        add_redfish_annotations(annotation_dictionary)
+        # In order to present annotations as a flat namespace, sequence numbers for elements from the
+        # odata, Message and Redfish schema shall have their two low-order bits set to 00b, 01b and 10b
+        # respectively
+        fix_annotations_sequence_numbers(annotation_dictionary, odata_row_index,   0)
+        fix_annotations_sequence_numbers(annotation_dictionary, message_row_index, 1)
+        fix_annotations_sequence_numbers(annotation_dictionary, redfish_row_index, 2)
 
     return annotation_dictionary
 
@@ -668,7 +696,7 @@ if __name__ == '__main__':
     # search for entity and build dictionary
     if entity in entity_repo:
         schema_dictionary = [[0, 0, 'Set', entity, 0, 1]]
-        num_entries = add_dictionary_entries(schema_dictionary, entity_repo, entity)
+        num_entries, offset = add_dictionary_entries(schema_dictionary, entity_repo, entity)
         schema_dictionary[0][DICTIONARY_ENTRY_CHILD_COUNT] = num_entries
         schema_dictionary = generate_dictionary(schema_dictionary)
 
