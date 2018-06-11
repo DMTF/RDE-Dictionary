@@ -42,9 +42,10 @@ OPTIMIZE_REDUNDANT_DICTIONARY_ENTRIES = True
 DICTIONARY_ENTRY_INDEX = 0
 DICTIONARY_ENTRY_SEQUENCE_NUMBER = 1
 DICTIONARY_ENTRY_FORMAT = 2
-DICTIONARY_ENTRY_FIELD_STRING = 3
-DICTIONARY_ENTRY_CHILD_COUNT = 4
-DICTIONARY_ENTRY_OFFSET = 5
+DICTIONARY_ENTRY_FORMAT_FLAGS = 3
+DICTIONARY_ENTRY_FIELD_STRING = 4
+DICTIONARY_ENTRY_CHILD_COUNT = 5
+DICTIONARY_ENTRY_OFFSET = 6
 
 ENTITY_REPO_TUPLE_TYPE_INDEX = 0
 ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX = 1
@@ -95,6 +96,27 @@ def get_primitive_type(property_type):
         return primitive_type
     return ''
 
+PROPERTY_SEQ_NUMBER = 0
+PROPERTY_FIELD_STRING = 1
+PROPERTY_TYPE = 2
+PROPERTY_FLAGS = 3
+PROPERTY_OFFSET = 4
+PROPERTY_EXPAND = 5
+
+
+def is_property_nullable(property):
+    property_is_nullable = True
+    if property.get('Nullable') is not None:
+        property_is_nullable = property.get('Nullable') == 'true'
+    return property_is_nullable
+
+
+def get_property_permissions(property):
+    permissions = property.xpath('child::edm:Annotation[@Term=\'OData.Permissions\']', namespaces=ODATA_ALL_NAMESPACES)
+    if len(permissions) == 1:
+        return 'Permission=' + permissions[0].get('EnumMember')[len('OData.Permission/'):]
+    return ''
+
 
 def get_properties(some_type, path='descendant-or-self::edm:Property | edm:NavigationProperty'):
     properties = []
@@ -104,6 +126,14 @@ def get_properties(some_type, path='descendant-or-self::edm:Property | edm:Navig
 
         property_type = property_element.get('Type')
 
+        property_is_nullable_flag = 'Nullable=False'
+        if is_property_nullable(property_element):
+            property_is_nullable_flag = 'Nullable=True'
+
+        property_permissions = get_property_permissions(property_element)
+
+        property_flags = property_is_nullable_flag + ',' + property_permissions
+
         is_auto_expand = property_element.tag != ODATA_NAVIGATION_PROPERTY \
             or (property_element.tag == ODATA_NAVIGATION_PROPERTY
                 and len(property_element.xpath('child::edm:Annotation[@Term=\'OData.AutoExpand\']',
@@ -112,7 +142,7 @@ def get_properties(some_type, path='descendant-or-self::edm:Property | edm:Navig
 
         primitive_type = get_primitive_type(property_type)
         if primitive_type != '':  # primitive type?
-            properties.append([property_name, primitive_type, ''])
+            properties.append([property_name, primitive_type, property_flags, ''])
         else:  # complex type
             complex_type = None
             is_array = re.compile('Collection\((.*?)\)').match(property_type)
@@ -120,30 +150,30 @@ def get_properties(some_type, path='descendant-or-self::edm:Property | edm:Navig
                 if is_auto_expand_refs:
                     # TODO fix references
                     # properties.append([propertyName, 'Array', strip_version(m.group(1)), 'AutoExpandRef'])
-                    properties.append([property_name, 'Array', 'AutoExpandRef'])
+                    properties.append([property_name, 'Array', property_flags, 'AutoExpandRef'])
                 else:  # AutoExpand or not specified
                     array_type = is_array.group(1)
 
                     if array_type.startswith('Edm.'):  # primitive types
-                        properties.append([property_name, 'Array', array_type, ''])
+                        properties.append([property_name, 'Array', property_flags, array_type, ''])
                     else:
-                        properties.append([property_name, 'Array', strip_version(is_array.group(1)), 'AutoExpand'])
+                        properties.append([property_name, 'Array', property_flags, strip_version(is_array.group(1)), 'AutoExpand'])
 
             else:
                 complex_type = find_element_from_type(property_type)
 
             if complex_type is not None:
                 if complex_type.tag == ODATA_ENUM_TYPE:
-                    properties.append([property_name, 'Enum', strip_version(property_type)])
+                    properties.append([property_name, 'Enum', property_flags, strip_version(property_type)])
                 elif complex_type.tag == ODATA_COMPLEX_TYPE or complex_type.tag == ODATA_ENTITY_TYPE:
                     if is_auto_expand_refs:
-                        properties.append([property_name, 'ResourceLink', ''])
+                        properties.append([property_name, 'ResourceLink', property_flags, ''])
                     else:
-                        properties.append([property_name, 'Set', strip_version(property_type)])
+                        properties.append([property_name, 'Set', property_flags, strip_version(property_type)])
                 elif complex_type.tag == ODATA_TYPE_DEFINITION:
                     assert(re.compile('Edm\..*').match(complex_type.get('UnderlyingType')))
                     m = re.compile('Edm\.(.*)').match(complex_type.get('UnderlyingType'))
-                    properties.append([property_name, m.group(1), ''])
+                    properties.append([property_name, m.group(1), property_flags, ''])
                 else:
                     if args.verbose:
                         print(complex_type.tag)
@@ -237,7 +267,7 @@ def add_actions(doc, entity_repo):
             entity_repo[action_entity_type] = ('Set', [])
 
         entity_repo[action_entity_type][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].append(
-            [actionType.get('Name'), 'Set', get_qualified_entity_name(actionType)])
+            [actionType.get('Name'), 'Set', '', get_qualified_entity_name(actionType)])
 
         if get_qualified_entity_name(actionType) not in entity_repo:
             entity_repo[get_qualified_entity_name(actionType)] = ('Set', [])
@@ -395,11 +425,8 @@ def print_table_data(data):
     print(tabulate(data, headers="firstrow", tablefmt="grid"))
 
 
-SEQ_NUMBER = 0
-FIELD_STRING = 1
-TYPE = 2
-OFFSET = 3
-EXPAND = 4
+def add_dictionary_row(dictionary, index, seq_num, format, format_flags, field_string, child_count, offset):
+    dictionary.append([index, seq_num, format, format_flags, field_string, child_count, offset])
 
 
 def add_dictionary_entries(schema_dictionary, entity_repo, entity):
@@ -409,7 +436,7 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity):
 
         if len(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]) == 0:
             if entity_type not in entity_offset_map:
-                schema_dictionary.append([start, 0, entity_type, '', 0, ''])
+                add_dictionary_row(schema_dictionary, start, 0, entity_type, '', '', 0, '')
 
                 # store off into the entity offset map to reuse for other entries that use
                 # the same entity type
@@ -422,16 +449,19 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity):
         index = 0
         for index, property in enumerate(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
             if entity_type == 'Enum':  # this is an enum
-                schema_dictionary.append(
-                    [index + start, property[SEQ_NUMBER], 'String', property[FIELD_STRING], 0, ''])
+                add_dictionary_row(schema_dictionary, index + start, property[PROPERTY_SEQ_NUMBER], 'String', '',
+                                   property[PROPERTY_FIELD_STRING], 0, '')
 
-            elif property[TYPE] == 'Array':  # this is an array
-                    schema_dictionary.append(
-                        [index + start, property[SEQ_NUMBER], property[TYPE], property[FIELD_STRING], 0,
-                         property[OFFSET]])
+            elif property[PROPERTY_TYPE] == 'Array':  # this is an array
+                add_dictionary_row(schema_dictionary, index + start, property[PROPERTY_SEQ_NUMBER],
+                                   property[PROPERTY_TYPE], property[PROPERTY_FLAGS], property[PROPERTY_FIELD_STRING],
+                                   0, property[PROPERTY_OFFSET])
+
             else:
-                schema_dictionary.append([index + start, property[SEQ_NUMBER], property[TYPE], property[FIELD_STRING],
-                                          0, property[OFFSET]])
+                add_dictionary_row(schema_dictionary, index + start, property[PROPERTY_SEQ_NUMBER],
+                                   property[PROPERTY_TYPE], property[PROPERTY_FLAGS], property[PROPERTY_FIELD_STRING],
+                                   0, property[PROPERTY_OFFSET])
+
         return index + 1, start
     else:
         #  Add a simple entry
@@ -442,7 +472,7 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity):
             simple_type = primitive_type
 
         if simple_type not in entity_offset_map:
-            schema_dictionary.append([start, 0, simple_type, '', 0, ''])
+            add_dictionary_row(schema_dictionary, start, 0, simple_type, '', '', 0, '')
 
             # store off into the entity offset map to reuse for other entries that use
             # the same primitive type
@@ -533,15 +563,7 @@ def generate_dictionary(dictionary, optimize_duplicate_items=True):
                     if item_type in entity_repo:
                         item_type = entity_repo[item[DICTIONARY_ENTRY_OFFSET]][ENTITY_REPO_TUPLE_TYPE_INDEX]
 
-                    #next_offset = offset + 1
-                    # if there are no properties for an entity (e.g. oem), then leave a blank offset
-                    #if item[DICTIONARY_ENTRY_OFFSET] in entity_repo \
-                    #        and len(entity_repo[item[DICTIONARY_ENTRY_OFFSET]][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]) \
-                    #        == 0:
-                    #    next_offset = ''
-
                     num_entries, offset = add_dictionary_entries(tmp_dictionary, entity_repo, item[DICTIONARY_ENTRY_OFFSET])
-                    #item[DICTIONARY_ENTRY_CHILD_COUNT] = num_entries
 
                     entity_offset_map[item[DICTIONARY_ENTRY_OFFSET]] = (offset, num_entries)
 
@@ -584,7 +606,7 @@ def add_odata_annotations(annotation_dictionary, odata_annotation_location):
         else:
             print('Unknown format')
 
-        annotation_dictionary.append([offset, offset - 5, bej_format, k, 0, ''])
+        add_dictionary_row(annotation_dictionary, offset, offset - 5, bej_format, '', k, 0, '')
         offset = offset + 1
         count = count + 1
 
@@ -607,11 +629,11 @@ def generate_annotation_dictionary():
         odata_row_index = 1
         message_row_index = 2
         redfish_row_index = 3
-        annotation_dictionary.append([0, 0, "Set", "annotation", 4, 1])
-        annotation_dictionary.append([odata_row_index, 0, "Set", "odata", 0, 5])
-        annotation_dictionary.append([message_row_index, 0, "Set", "Message", 0, 'Message'])
-        annotation_dictionary.append([redfish_row_index, 0, "Set", "Redfish", 0, 'Redfish'])
-        annotation_dictionary.append([4, 0, "Set", "reserved", 0, ''])
+        add_dictionary_row(annotation_dictionary, 0, 0, "Set", '', "annotation", 4, 1)
+        add_dictionary_row(annotation_dictionary, odata_row_index, 0, "Set", '', "odata", 0, 5)
+        add_dictionary_row(annotation_dictionary, message_row_index, 0, "Set", '', "Message", 0, 'Message')
+        add_dictionary_row(annotation_dictionary, redfish_row_index, 0, "Set", '', "Redfish", 0, 'Redfish')
+        add_dictionary_row(annotation_dictionary, 4, 0, "Set", '', "reserved", 0, '')
 
         odata_annotation_location = args.schemaDir + '/json-schema/' + 'odata.v4_0_2.json'
         annotation_dictionary[1][DICTIONARY_ENTRY_CHILD_COUNT] = \
@@ -690,18 +712,20 @@ if __name__ == '__main__':
     # set the entity oem entry to the special OEM entity type
     if args.oemSchemaFilenames:
         for property in entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]:
-            if property[FIELD_STRING] == 'Oem':
-                property[OFFSET] = oemEntityType
+            if property[PROPERTY_FIELD_STRING] == 'Oem':
+                property[PROPERTY_OFFSET] = oemEntityType
 
     # search for entity and build dictionary
     if entity in entity_repo:
-        schema_dictionary = [[0, 0, 'Set', entity, 0, 1]]
+        schema_dictionary = []
+        add_dictionary_row(schema_dictionary, index=0, seq_num=0, format='Set', format_flags='', field_string=entity,
+                           child_count=0, offset=1)
         num_entries, offset = add_dictionary_entries(schema_dictionary, entity_repo, entity)
         schema_dictionary[0][DICTIONARY_ENTRY_CHILD_COUNT] = num_entries
         schema_dictionary = generate_dictionary(schema_dictionary)
 
         print_table_data(
-            [["Row", "Sequence#", "Format", "Field String", "Child Count", "Offset"]]
+            [["Row", "Sequence#", "Format", "Flags", "Field String", "Child Count", "Offset"]]
             +
             schema_dictionary
         )
@@ -711,7 +735,7 @@ if __name__ == '__main__':
         entity_offset_map = {}
         annotation_dictionary = generate_annotation_dictionary()
         print_table_data(
-            [["Row", "Sequence#", "Format", "Field String", "Child Count", "Offset"]]
+            [["Row", "Sequence#", "Format", "Flags", "Field String", "Child Count", "Offset"]]
             +
             annotation_dictionary
         )
