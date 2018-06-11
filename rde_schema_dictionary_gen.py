@@ -584,7 +584,7 @@ def add_odata_annotations(annotation_dictionary, odata_annotation_location):
         else:
             print('Unknown format')
 
-        annotation_dictionary.append([offset, offset - 5, bej_format, k, 0, 0])
+        annotation_dictionary.append([offset, offset - 5, bej_format, k, 0, ''])
         offset = offset + 1
         count = count + 1
 
