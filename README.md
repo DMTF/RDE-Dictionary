@@ -622,3 +622,8 @@ Fixed size consumed: 980
 Field string size consumed: 1286
 Total size: 2266
 ```
+
+### Example for OEM extensions
+```
+python rde_schema_dictionary_gen.py local --schemaDir "c:\Users\bnatraja\Development\redfish-forum-all\oem\Redfish" --schemaFilename Drive_v1.xml --entity Drive.Drive --oemSchemaFilenames OEM1DriveExt_v1.xml --oemEntities OEM1=OEM1DriveExt.OEM1DriveExt
+```
