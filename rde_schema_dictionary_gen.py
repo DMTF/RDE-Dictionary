@@ -703,7 +703,7 @@ if __name__ == '__main__':
         entity_repo[oemEntityType] = ('Set', [])
         for oemEntityPair in args.oemEntities:
             oemName, oemEntity = oemEntityPair.split('=')
-            entity_repo[oemEntityType][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].append([oemName, 'Set', oemEntity])
+            entity_repo[oemEntityType][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].append([oemName, 'Set', '', oemEntity])
 
     add_all_entity_and_complex_types(doc_list, entity_repo)
     if args.verbose:
