@@ -96,6 +96,7 @@ def get_primitive_type(property_type):
         return primitive_type
     return ''
 
+
 PROPERTY_SEQ_NUMBER = 0
 PROPERTY_FIELD_STRING = 1
 PROPERTY_TYPE = 2
@@ -149,7 +150,6 @@ def get_properties(some_type, path='descendant-or-self::edm:Property | edm:Navig
             if is_array:
                 if is_auto_expand_refs:
                     # TODO fix references
-                    # properties.append([propertyName, 'Array', strip_version(m.group(1)), 'AutoExpandRef'])
                     properties.append([property_name, 'Array', property_flags, 'AutoExpandRef'])
                 else:  # AutoExpand or not specified
                     array_type = is_array.group(1)
@@ -429,12 +429,12 @@ def add_dictionary_row(dictionary, index, seq_num, format, format_flags, field_s
     dictionary.append([index, seq_num, format, format_flags, field_string, child_count, offset])
 
 
-def add_dictionary_entries(schema_dictionary, entity_repo, entity):
+def add_dictionary_entries(schema_dictionary, entity_repo, entity, is_parent_array):
     if entity in entity_repo:
         entity_type = entity_repo[entity][ENTITY_REPO_TUPLE_TYPE_INDEX]
         start = len(schema_dictionary)
 
-        if len(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]) == 0:
+        if len(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]) == 0 and is_parent_array:
             if entity_type not in entity_offset_map:
                 add_dictionary_row(schema_dictionary, start, 0, entity_type, '', '', 0, '')
 
@@ -445,42 +445,52 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity):
                 start = entity_offset_map[entity_type][0]
 
             return 1, start
+            # return 0, 0
+
+        # For a set add a row indicating this is a set
+        child_count = 0
+        offset = start
+        if entity_type == 'Set':
+            add_dictionary_row(schema_dictionary, start, 0, 'Set', '', '',
+                               len(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]), start + 1)
+            child_count = 1
+            start = start + 1
 
         index = 0
         for index, property in enumerate(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
             if entity_type == 'Enum':  # this is an enum
                 add_dictionary_row(schema_dictionary, index + start, property[PROPERTY_SEQ_NUMBER], 'String', '',
                                    property[PROPERTY_FIELD_STRING], 0, '')
-
-            elif property[PROPERTY_TYPE] == 'Array':  # this is an array
+            else:  # all other types
                 add_dictionary_row(schema_dictionary, index + start, property[PROPERTY_SEQ_NUMBER],
                                    property[PROPERTY_TYPE], property[PROPERTY_FLAGS], property[PROPERTY_FIELD_STRING],
                                    0, property[PROPERTY_OFFSET])
 
-            else:
-                add_dictionary_row(schema_dictionary, index + start, property[PROPERTY_SEQ_NUMBER],
-                                   property[PROPERTY_TYPE], property[PROPERTY_FLAGS], property[PROPERTY_FIELD_STRING],
-                                   0, property[PROPERTY_OFFSET])
+        if child_count == 0:
+            child_count = index + 1
 
-        return index + 1, start
+        entity_offset_map[entity] = (offset, child_count)
+
+        return child_count, offset
     else:
-        #  Add a simple entry
-        start = len(schema_dictionary)
-        simple_type = 'Set'
-        primitive_type = get_primitive_type(entity)
-        if primitive_type != '':
-            simple_type = primitive_type
+        if is_parent_array:
+            #  Add a simple entry
+            start = len(schema_dictionary)
+            simple_type = 'Set'
+            primitive_type = get_primitive_type(entity)
+            if primitive_type != '':
+                simple_type = primitive_type
 
-        if simple_type not in entity_offset_map:
-            add_dictionary_row(schema_dictionary, start, 0, simple_type, '', '', 0, '')
+            if simple_type not in entity_offset_map:
+                add_dictionary_row(schema_dictionary, start, 0, simple_type, '', '', 0, '')
 
-            # store off into the entity offset map to reuse for other entries that use
-            # the same primitive type
-            entity_offset_map[simple_type] = (start, 0)
-        else:
-            start = entity_offset_map[simple_type][0]
+                # store off into the entity offset map to reuse for other entries that use
+                # the same primitive type
+                entity_offset_map[simple_type] = (start, 0)
+            else:
+                start = entity_offset_map[simple_type][0]
 
-        return 1, start
+            return 1, start
     return 0, 0
 
 
@@ -557,18 +567,27 @@ def generate_dictionary(dictionary, optimize_duplicate_items=True):
                         num_entries = entity_offset_map[item[DICTIONARY_ENTRY_OFFSET]][1]
 
                 if offset == 0:
-                    offset = len(tmp_dictionary)
-
                     item_type = item[DICTIONARY_ENTRY_OFFSET]
                     if item_type in entity_repo:
                         item_type = entity_repo[item[DICTIONARY_ENTRY_OFFSET]][ENTITY_REPO_TUPLE_TYPE_INDEX]
 
-                    num_entries, offset = add_dictionary_entries(tmp_dictionary, entity_repo, item[DICTIONARY_ENTRY_OFFSET])
+                    num_entries, offset = add_dictionary_entries(tmp_dictionary, entity_repo,
+                                                                 item[DICTIONARY_ENTRY_OFFSET],
+                                                                 item[DICTIONARY_ENTRY_FORMAT] == 'Array')
 
-                    entity_offset_map[item[DICTIONARY_ENTRY_OFFSET]] = (offset, num_entries)
+                tmp_dictionary[index][DICTIONARY_ENTRY_OFFSET] = ''
+                if offset != 0:
+                    # The offset returned in the case of a Set is a Set entry pointing to a list of children.
+                    # If the parent is a property that is a Set, we only need the property entry to point to the first
+                    # child and encode the child count in the parent property entry itself.
+                    if item[DICTIONARY_ENTRY_FORMAT] == 'Set':
+                        tmp_dictionary[index][DICTIONARY_ENTRY_OFFSET] = offset + 1
+                        tmp_dictionary[index][DICTIONARY_ENTRY_CHILD_COUNT] = \
+                            tmp_dictionary[offset][DICTIONARY_ENTRY_CHILD_COUNT]
+                    else:
+                        tmp_dictionary[index][DICTIONARY_ENTRY_OFFSET] = offset
+                        tmp_dictionary[index][DICTIONARY_ENTRY_CHILD_COUNT] = num_entries
 
-                tmp_dictionary[index][DICTIONARY_ENTRY_OFFSET] = offset
-                tmp_dictionary[index][DICTIONARY_ENTRY_CHILD_COUNT] = num_entries
                 was_expanded = True
                 break
         if was_expanded:
@@ -718,10 +737,7 @@ if __name__ == '__main__':
     # search for entity and build dictionary
     if entity in entity_repo:
         schema_dictionary = []
-        add_dictionary_row(schema_dictionary, index=0, seq_num=0, format='Set', format_flags='', field_string=entity,
-                           child_count=0, offset=1)
-        num_entries, offset = add_dictionary_entries(schema_dictionary, entity_repo, entity)
-        schema_dictionary[0][DICTIONARY_ENTRY_CHILD_COUNT] = num_entries
+        num_entries, offset = add_dictionary_entries(schema_dictionary, entity_repo, entity, is_parent_array=False)
         schema_dictionary = generate_dictionary(schema_dictionary)
 
         print_table_data(
