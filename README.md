@@ -1,6 +1,7 @@
 # rde-dictionary-builder
 
 ## Pre Requisites:
+Minimum Python version: 3.6
 
 The RDE dictionary builder is based on Python 3 and the client system is required to have the Python framework installed before the tool can be installed and executed on the system.  Additionally, the following packages are required to be installed and accessible from the python environment:
 * lxml
