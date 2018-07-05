@@ -695,15 +695,29 @@ bej_format_table = {
 }
 
 
-def to_bej_format(format):
-    return bej_format_table[format]
+def to_bej_format(format, is_nullable, is_readonly):
+    format = bej_format_table[format] << 4
+    if is_readonly:
+        format |= 0x02
+    if is_nullable:
+        format |= 0x04
+
+    return format
 
 
 bej_format_table_reverse_map = dict((reversed(item) for item in bej_format_table.items()))
 
 
 def from_bej_format(format):
-    return bej_format_table_reverse_map[format]
+    return bej_format_table_reverse_map[format >> 4]
+
+
+def is_nullable(format):
+    return (format & 0x04) != 0
+
+
+def is_readonly(format):
+    return (format & 0x02) != 0
 
 
 def generate_byte_array(dictionary):
@@ -718,7 +732,12 @@ def generate_byte_array(dictionary):
 
     # Add the fixed sized entries
     for item in dictionary:
-        binary_data.extend(to_bej_format(item[DICTIONARY_ENTRY_FORMAT]).to_bytes(1, 'little'))  # Format
+        # Format
+        format = to_bej_format(item[DICTIONARY_ENTRY_FORMAT],
+                               is_nullable='Nullable=True' in item[DICTIONARY_ENTRY_FORMAT_FLAGS],
+                               is_readonly=('Permission=Read' in item[DICTIONARY_ENTRY_FORMAT_FLAGS] and 'Permission=ReadWrite' not in item[DICTIONARY_ENTRY_FORMAT_FLAGS]))
+        binary_data.extend(format.to_bytes(1, 'little'))
+
         binary_data.extend(item[DICTIONARY_ENTRY_SEQUENCE_NUMBER].to_bytes(2, 'little'))  # SequenceNumber
 
         # ChildPointerOffset
@@ -786,12 +805,18 @@ def print_binary_dictionary(byte_array):
     print('EntryCount: ', total_entries)
     print('DictionarySize: ', stream.get_int(4))
 
-
     # print each entry
     table = []
     current_entry = 0
     while current_entry < total_entries:
-        format = from_bej_format(stream.get_int(1))
+        format = stream.get_int(1)
+        format_str = from_bej_format(format)
+        format_flags = ''
+        if is_nullable(format):
+            format_flags = 'Nullable=True'
+        if is_readonly(format):
+            format_flags += ',Permission=Read'
+
         sequence = stream.get_int(2)
         offset = stream.get_int(2)
         child_count = stream.get_int(2)
@@ -804,7 +829,7 @@ def print_binary_dictionary(byte_array):
         if name_length > 0:
             name = "".join(map(chr, byte_array[name_offset:name_offset+name_length]))
 
-        table.append([current_entry, sequence, format, '', name, child_count, dictionary_offset_from_binary_offset(offset)])
+        table.append([current_entry, sequence, format_str, format_flags, name, child_count, dictionary_offset_from_binary_offset(offset)])
         current_entry += 1
 
     print_table_data(
