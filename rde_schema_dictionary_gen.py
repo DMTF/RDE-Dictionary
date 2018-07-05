@@ -21,6 +21,7 @@ import urllib.request
 import sys
 from collections import Counter
 
+
 # dict to build a list of namespaces that will be used to build the d
 includeNamespaces = {}
 
@@ -494,45 +495,15 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity, is_parent_arr
     return 0, 0
 
 
-def print_dictionary_summary(schema_dictionary):
-    print("Total Entries:", len(schema_dictionary))
-    print("Fixed size consumed:", 10 * len(schema_dictionary))
+def print_dictionary_summary(dictionary):
+    print("Total Entries:", len(dictionary))
+    print("Fixed size consumed:", 13 * len(dictionary))
     # calculate size of free form property names:
     total_field_string_size = 0
-    for item in schema_dictionary:
+    for item in dictionary:
         total_field_string_size = total_field_string_size + len(item[DICTIONARY_ENTRY_FIELD_STRING])
     print("Field string size consumed:", total_field_string_size)
-    print('Total size:', 10 * len(schema_dictionary) + total_field_string_size)
-
-
-def to_format(format):
-    if format == 'Set':
-        return '0x00'
-    elif format == 'Array':
-        return '0x01'
-    elif format == 'Integer':
-        return '0x03'
-    elif format == 'Enum':
-        return '0x04'
-    elif format == 'String  ':
-        return '0x05'
-    elif format == 'Boolean':
-        return '0x07'
-    elif format == 'ResourceLink':
-        return '0x0F'
-
-
-# TODO
-def generate_byte_array(schema_dictionary):
-    # first entry is the schema entity
-    print('const uint8', schema_dictionary[0][DICTIONARY_ENTRY_FIELD_STRING].split('.')[1]
-          + '_schema_dictionary[]= { 0x00, 0x00')
-
-    iter_schema = iter(schema_dictionary)
-    next(iter_schema)  # skip the first entry since it is the schema entity
-    for item in iter_schema:
-        print(to_format(item[DICTIONARY_ENTRY_FORMAT]))
-        pass
+    print('Total size:', dictionary_binary_size(dictionary))
 
 
 entity_offset_map = {}
@@ -670,16 +641,190 @@ def generate_annotation_dictionary():
     return annotation_dictionary
 
 
+def dictionary_binary_header_size():
+    version_tag_size = 1
+    reserved_size = 1
+    entry_count_size = 2
+    dictionary_size_size = 4
+
+    return version_tag_size + reserved_size + entry_count_size + dictionary_size_size
+
+
+def dictonary_binary_entry_size():
+    entry_format_size = 1
+    entry_sequence_number_size = 2
+    entry_child_pointer_offset_size = 2
+    entry_child_count_size = 2
+    entry_name_length_size = 1
+    entry_format_length_size = 1
+    entry_name_offset_size = 2
+    entry_format_offset_size = 2
+
+    return entry_format_size + entry_sequence_number_size + entry_child_pointer_offset_size + entry_child_count_size + \
+           entry_name_length_size + entry_format_length_size + entry_name_offset_size + entry_format_offset_size
+
+
+def dictionary_binary_size(dictionary):
+
+    total_field_string_size = 0
+    for item in dictionary:
+        total_field_string_size = total_field_string_size + len(item[DICTIONARY_ENTRY_FIELD_STRING]) \
+                                  + 1  # for null termination
+
+    return dictionary_binary_header_size() + len(dictionary) *  dictonary_binary_entry_size() + total_field_string_size
+
+
+def binary_offset_from_dictionary_offset(offset):
+    return dictionary_binary_header_size() + (offset * dictonary_binary_entry_size()) - 1
+
+
+def dictionary_offset_from_binary_offset(offset):
+    if offset:
+        return (offset - dictionary_binary_header_size() + 1)/dictonary_binary_entry_size()
+    else:
+        return offset
+
+bej_format_table = {
+    'Set':          0x00,
+    'Array':        0x01,
+    'Integer':      0x02,
+    'Enum':         0x04,
+    'String':       0x05,
+    'Boolean':      0x07,
+    'ResourceLink': 0x0F
+}
+
+
+def to_bej_format(format):
+    return bej_format_table[format]
+
+
+bej_format_table_reverse_map = dict((reversed(item) for item in bej_format_table.items()))
+
+
+def from_bej_format(format):
+    return bej_format_table_reverse_map[format]
+
+
+def generate_byte_array(dictionary):
+    binary_data = []
+    binary_data.append(0x00)  # VersionTag
+    binary_data.append(0x00)  # Reserved
+    binary_data.extend(len(dictionary).to_bytes(2, 'little', signed=False))  # EntryCount
+    binary_data.extend(dictionary_binary_size(dictionary).to_bytes(4, 'little', signed=False))  # DictionarySize
+
+    # track property name offsets, this is initialized to the first property name
+    name_offset = dictionary_binary_header_size() + (len(dictionary) * dictonary_binary_entry_size())
+
+    # Add the fixed sized entries
+    for item in dictionary:
+        binary_data.extend(to_bej_format(item[DICTIONARY_ENTRY_FORMAT]).to_bytes(1, 'little'))  # Format
+        binary_data.extend(item[DICTIONARY_ENTRY_SEQUENCE_NUMBER].to_bytes(2, 'little'))  # SequenceNumber
+
+        # ChildPointerOffset
+        if item[DICTIONARY_ENTRY_OFFSET]:
+            binary_data.extend(binary_offset_from_dictionary_offset(int(item[DICTIONARY_ENTRY_OFFSET])).to_bytes(2, 'little'))
+        else:
+            binary_data.extend([0x00, 0x00])
+
+        # ChildCount
+        if item[DICTIONARY_ENTRY_FIELD_STRING] == 'Array':
+            binary_data.extend([0xFF, 0xFF])
+        else:
+            binary_data.extend(item[DICTIONARY_ENTRY_CHILD_COUNT].to_bytes(2, 'little'))
+
+        # NameLength
+        if item[DICTIONARY_ENTRY_FIELD_STRING]:
+            binary_data.append(len(item[DICTIONARY_ENTRY_FIELD_STRING]) + 1)
+        else:
+            binary_data.append(0x00)
+
+        # TODO: FormatLength
+        binary_data.append(0x00)
+
+        # NameOffset
+        if item[DICTIONARY_ENTRY_FIELD_STRING]:
+            binary_data.extend(name_offset.to_bytes(2, 'little'))
+            name_offset += len(item[DICTIONARY_ENTRY_FIELD_STRING]) + 1
+        else:
+            binary_data.extend([0x00, 0x00])
+
+        # TODO: FormatOffset
+        binary_data.extend([0x00, 0x00])
+
+    # Add the property names
+    for item in dictionary:
+        if item[DICTIONARY_ENTRY_FIELD_STRING]:
+            binary_data.extend([ord(elem) for elem in item[DICTIONARY_ENTRY_FIELD_STRING]])
+            binary_data.append(0x00)
+
+    return binary_data
+
+
+def get_int_from_byte_array(byte_array, start_index, size):
+    return int.from_bytes(byte_array[start_index:start_index+size], 'little'), start_index + size
+
+
+class DictionaryByteArrayStream:
+    def __init__(self, byte_array):
+        self._byte_array = byte_array
+        self._current_index = 0
+
+    def get_int(self, size):
+        value = int.from_bytes(self._byte_array[self._current_index:self._current_index+size], 'little')
+        self._current_index += size
+        return value
+
+
+def print_binary_dictionary(byte_array):
+    stream = DictionaryByteArrayStream(byte_array)
+
+    # print header
+    print('VersionTag: ', stream.get_int(1))
+    print('Reserved: ', stream.get_int(1))
+    total_entries = stream.get_int(2)
+    print('EntryCount: ', total_entries)
+    print('DictionarySize: ', stream.get_int(4))
+
+
+    # print each entry
+    table = []
+    current_entry = 0
+    while current_entry < total_entries:
+        format = from_bej_format(stream.get_int(1))
+        sequence = stream.get_int(2)
+        offset = stream.get_int(2)
+        child_count = stream.get_int(2)
+        name_length = stream.get_int(1)
+        format_length = stream.get_int(1)
+        name_offset = stream.get_int(2)
+        format_offset = stream.get_int(2)
+
+        name = ''
+        if name_length > 0:
+            name = "".join(map(chr, byte_array[name_offset:name_offset+name_length]))
+
+        table.append([current_entry, sequence, format, '', name, child_count, dictionary_offset_from_binary_offset(offset)])
+        current_entry += 1
+
+    print_table_data(
+        [["Row", "Sequence#", "Format", "Flags", "Field String", "Child Count", "Offset"]]
+        +
+        table
+    )
+
+
 if __name__ == '__main__':
     # rde_schema_dictionary parse --schemaDir=directory --schemaFilename=filename
     parser = argparse.ArgumentParser()
     parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
     subparsers = parser.add_subparsers(dest='source')
 
-    remote_parser = subparsers.add_parser('remote')
-    remote_parser.add_argument('--schemaURL', type=str, required=True)
-    remote_parser.add_argument('--entity', type=str, required=True)
-    remote_parser.add_argument('--outputFile', type=str, required=False)
+    # TODO: Fix remote for json fixups
+    # remote_parser = subparsers.add_parser('remote')
+    # remote_parser.add_argument('--schemaURL', type=str, required=True)
+    # remote_parser.add_argument('--entity', type=str, required=True)
+    # remote_parser.add_argument('--outputFile', type=str, required=False)
 
     local_parser = subparsers.add_parser('local')
     local_parser.add_argument('--schemaDir', type=str, required=True)
@@ -689,11 +834,22 @@ if __name__ == '__main__':
     local_parser.add_argument('--oemEntities', nargs='*', type=str, required=False)
     local_parser.add_argument('--outputFile', type=str, required=False)
 
+    dictionary_dump = subparsers.add_parser('view')
+    dictionary_dump.add_argument('--file', type=str, required=True)
+
     args = parser.parse_args()
 
     if len(sys.argv) == 1 or args.source is None:
         parser.print_help(sys.stderr)
         sys.exit(1)
+
+    # view an existing binary dictionary
+    if args.source == 'view':
+        # load the binary dictionary file
+        file = open(args.file, 'rb')
+        contents = file.read()
+        print_binary_dictionary(list(contents))
+        sys.exit()
 
     # bring in all dependent documents and their corresponding namespaces
     doc_list = {}
@@ -757,16 +913,14 @@ if __name__ == '__main__':
         )
         print_dictionary_summary(annotation_dictionary)
 
-        # TODO: Generate
-        # generate_byte_array(schema_dictionary)
 
+        # Generate binary dictionary file
         if args.outputFile:
-            file = open(args.outputFile, 'w')
-            file.write(json.dumps(schema_dictionary))
+            dictionary_byte_array = generate_byte_array(schema_dictionary)
+            print_binary_dictionary(dictionary_byte_array)
+            file = open(args.outputFile, 'wb')
+            file.write(bytes(dictionary_byte_array))
             file.close()
 
-            file = open(args.outputFile, 'r')
-            dict = json.load(file)
-            print(dict)
     else:
         print('Error, cannot find entity:', entity)
