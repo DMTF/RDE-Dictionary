@@ -339,6 +339,27 @@ def add_namespaces(source, doc_list):
             add_namespaces(dependent_source, doc_list)
 
 
+def get_latest_version_as_ver32(entity):
+    """
+    Returns the latest version of the entity as a PLDM ver32 array of bytes
+
+    Args:
+        entity: The EntityType or ComplexType in the format Namespace.Entity (e.g. Drive.Drive)
+    """
+
+    # search the namespaces for all 'entity.vMajor_Minor_Errata'
+    result = [key for key, value in includeNamespaces.items() if key.startswith(entity.split('.')[1])]
+
+    # The last item in result will have the latest version
+    if len(result) > 1:  # This is a versioned namespace
+        ver = result[len(result) - 1].split('.')[1][1:].split('_')
+        verNumber = ((int(ver[0]) | 0xF0) << 24) | ((int(ver[1]) | 0xF0) << 16) | ((int(ver[2]) | 0xF0) << 8)
+        return verNumber
+    else:  # This is unversioned, return v0_0_0
+        return 0xFFFFFFFF
+
+
+
 def find_enum(key, dictionary):
     for k, v in dictionary.items():
         if k == key and "enum" in v:
@@ -622,30 +643,30 @@ def fix_annotations_sequence_numbers(annotation_dictionary, annotation_index, st
 
 def generate_annotation_dictionary():
     annotation_dictionary = []
-    # TODO: Currently only local is supported
-    if args.source == 'local':
-        # first 4 entries
-        odata_row_index = 1
-        message_row_index = 2
-        redfish_row_index = 3
-        add_dictionary_row(annotation_dictionary, 0, 0, "Set", '', "annotation", 4, 1)
-        add_dictionary_row(annotation_dictionary, odata_row_index, 0, "Set", '', "odata", 0, 5)
-        add_dictionary_row(annotation_dictionary, message_row_index, 0, "Set", '', "Message", 0, 'Message')
-        add_dictionary_row(annotation_dictionary, redfish_row_index, 0, "Set", '', "Redfish", 0, 'Redfish')
-        add_dictionary_row(annotation_dictionary, 4, 0, "Set", '', "reserved", 0, '')
 
-        odata_annotation_location = args.schemaDir + '/json-schema/' + 'odata.v4_0_2.json'
-        annotation_dictionary[1][DICTIONARY_ENTRY_CHILD_COUNT] = \
-            add_odata_annotations(annotation_dictionary, odata_annotation_location)
+    # first 4 entries
+    odata_row_index = 1
+    message_row_index = 2
+    redfish_row_index = 3
+    add_dictionary_row(annotation_dictionary, 0, 0, "Set", '', "annotation", 4, 1)
+    add_dictionary_row(annotation_dictionary, odata_row_index, 0, "Set", '', "odata", 0, 5)
+    add_dictionary_row(annotation_dictionary, message_row_index, 0, "Set", '', "Message", 0, 'Message')
+    add_dictionary_row(annotation_dictionary, redfish_row_index, 0, "Set", '', "Redfish", 0, 'Redfish')
+    add_dictionary_row(annotation_dictionary, 4, 0, "Set", '', "reserved", 0, '')
 
-        annotation_dictionary = generate_dictionary(annotation_dictionary, False)
+    odata_annotation_location = args.schemaDir + '/json-schema/' + 'odata.v4_0_2.json'
+    annotation_dictionary[1][DICTIONARY_ENTRY_CHILD_COUNT] = \
+        add_odata_annotations(annotation_dictionary, odata_annotation_location)
 
-        # In order to present annotations as a flat namespace, sequence numbers for elements from the
-        # odata, Message and Redfish schema shall have their two low-order bits set to 00b, 01b and 10b
-        # respectively
-        fix_annotations_sequence_numbers(annotation_dictionary, odata_row_index,   0)
-        fix_annotations_sequence_numbers(annotation_dictionary, message_row_index, 1)
-        fix_annotations_sequence_numbers(annotation_dictionary, redfish_row_index, 2)
+    annotation_dictionary = generate_dictionary(annotation_dictionary, False)
+
+    # In order to present annotations as a flat namespace, sequence numbers for elements from the
+    # odata, Message and Redfish schema shall have their two low-order bits set to 00b, 01b and 10b
+    # respectively
+    fix_annotations_sequence_numbers(annotation_dictionary, odata_row_index,   0)
+    fix_annotations_sequence_numbers(annotation_dictionary, message_row_index, 1)
+    fix_annotations_sequence_numbers(annotation_dictionary, redfish_row_index, 2)
+
     return annotation_dictionary
 
 
@@ -659,10 +680,10 @@ def truncate_entity_repo(entity_repo, entity, required_properties, is_truncated,
             # remove it from the entity repo.
             for property in reversed(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
                 is_required = False
-                for property[ENTITY_REPO_ENTRY_PROPERTY_NAME] in required_properties:
+                if property[ENTITY_REPO_ENTRY_PROPERTY_NAME] in required_properties:
                     is_required = True
-                    truncate_entity_repo(entity_repo, property[ENTITY_REPO_ENTRY_REFERENCE], required_properties, is_truncated, required)
-                    break
+                    truncate_entity_repo(entity_repo, property[ENTITY_REPO_ENTRY_REFERENCE], required_properties,
+                                         is_truncated, property[ENTITY_REPO_ENTRY_PROPERTY_NAME])
                 if is_required == False:
                     entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].remove(property)
                     is_truncated = True
@@ -736,11 +757,12 @@ def build_requirements(obj, required_properties):
 
 def dictionary_binary_header_size():
     version_tag_size = 1
-    reserved_size = 1
+    dictionary_flags_size = 1
+    schema_version_size = 4
     entry_count_size = 2
     dictionary_size_size = 4
 
-    return version_tag_size + reserved_size + entry_count_size + dictionary_size_size
+    return version_tag_size + dictionary_flags_size + schema_version_size + entry_count_size + dictionary_size_size
 
 
 def dictonary_binary_entry_size():
@@ -813,11 +835,20 @@ def is_readonly(format):
     return (format & 0x02) != 0
 
 
-def generate_byte_array(dictionary):
+def generate_byte_array(dictionary, version, is_truncated):
     binary_data = []
     binary_data.append(0x00)  # VersionTag
-    binary_data.append(0x00)  # Reserved
+
+    # DictionaryFlags
+    if is_truncated:
+        binary_data.append(0x01)
+    else:
+        binary_data.append(0x00)
+
+    binary_data.extend(version.to_bytes(4, 'little', signed=False))  # SchemaVersion
+
     binary_data.extend(len(dictionary).to_bytes(2, 'little', signed=False))  # EntryCount
+
     binary_data.extend(dictionary_binary_size(dictionary).to_bytes(4, 'little', signed=False))  # DictionarySize
 
     # track property name offsets, this is initialized to the first property name
@@ -893,7 +924,8 @@ def print_binary_dictionary(byte_array):
 
     # print header
     print('VersionTag: ', stream.get_int(1))
-    print('Reserved: ', stream.get_int(1))
+    print('DictionaryFlags: ', stream.get_int(1))
+    print('SchemaVersion: ', hex(stream.get_int(4)))
     total_entries = stream.get_int(2)
     print('EntryCount: ', total_entries)
     print('DictionarySize: ', stream.get_int(4))
@@ -953,6 +985,12 @@ if __name__ == '__main__':
     local_parser.add_argument('--profile', type=str, required=False)
     local_parser.add_argument('--outputFile', type=str, required=False)
 
+
+    annotation_parser = subparsers.add_parser('annotation')
+    annotation_parser.add_argument('--schemaDir', type=str, required=True)
+    annotation_parser.add_argument('--outputFile', type=str, required=False)
+
+
     dictionary_dump = subparsers.add_parser('view')
     dictionary_dump.add_argument('--file', type=str, required=True)
 
@@ -973,81 +1011,93 @@ if __name__ == '__main__':
     # bring in all dependent documents and their corresponding namespaces
     doc_list = {}
     source = ''
+    entity = ''
     oemSources = []
+    entity_repo = {}
+
     if args.source == 'local':
+        entity = args.entity
         source = args.schemaDir + '/' + 'metadata/' + args.schemaFilename
         if args.oemSchemaFilenames:
             for schemaFilename in args.oemSchemaFilenames:
                 oemSources.append(args.schemaDir + '/' + 'metadata/' + schemaFilename)
+        if args.oemSchemaFilenames:
+            oemEntityType = entity + '.Oem'
+            # create a special entity for OEM and set the major entity's oem section to it
+            entity_repo[oemEntityType] = ('Set', [])
+            for oemEntityPair in args.oemEntities:
+                oemName, oemEntity = oemEntityPair.split('=')
+                entity_repo[oemEntityType][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].append([oemName, 'Set', '', oemEntity])
     elif args.source == 'remote':
+        entity = args.entity
         source = args.schemaURL
+    elif args.source == 'annotation':
+        # Just choose a dummy complex type to start the annotation dictionary generation process
+        entity = 'RedfishExtensions.PropertyPattern'
+        source = args.schemaDir + '/' + 'metadata/' + 'RedfishExtensions_v1.xml'
 
     add_namespaces(source, doc_list)
     for oemSource in oemSources:
         add_namespaces(oemSource, doc_list)
 
-    entity = args.entity
     if args.verbose:
         pprint.PrettyPrinter(indent=3).pprint(doc_list)
-
-    entity_repo = {}
-    if args.oemSchemaFilenames:
-        oemEntityType = entity + '.Oem'
-        # create a special entity for OEM and set the major entity's oem section to it
-        entity_repo[oemEntityType] = ('Set', [])
-        for oemEntityPair in args.oemEntities:
-            oemName, oemEntity = oemEntityPair.split('=')
-            entity_repo[oemEntityType][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].append([oemName, 'Set', '', oemEntity])
 
     add_all_entity_and_complex_types(doc_list, entity_repo)
     if args.verbose:
         pprint.PrettyPrinter(indent=3).pprint(entity_repo)
 
     # set the entity oem entry to the special OEM entity type
-    if args.oemSchemaFilenames:
+    if args.source == 'local' and args.oemSchemaFilenames:
         for property in entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]:
             if property[PROPERTY_FIELD_STRING] == 'Oem':
                 property[PROPERTY_OFFSET] = oemEntityType
 
     # search for entity and build dictionary
     if entity in entity_repo:
-        is_truncated = False
-        if args.profile:
-            with open(args.profile) as file:
-                json_profile = json.load(file)
-            # Fix up the profile
-            profile_requirements = process_profile(json_profile, entity)
-            if profile_requirements:
-                truncate_entity_repo(entity_repo, entity, profile_requirements, is_truncated)
-            else:
-                print('Error parsing profile')
-                sys.exit(1)
-        schema_dictionary = []
-        num_entries, offset = add_dictionary_entries(schema_dictionary, entity_repo, entity, is_parent_array=False)
-        schema_dictionary = generate_dictionary(schema_dictionary)
+        ver = ''
+        dictionary = []
+        if args.source == 'local':
+            # truncate the entity_repo first if a profile is specified
+            is_truncated = False
+            if args.profile:
+                with open(args.profile) as file:
+                    json_profile = json.load(file)
+                # Fix up the profile
+                profile_requirements = process_profile(json_profile, entity)
+                if profile_requirements:
+                    truncate_entity_repo(entity_repo, entity, profile_requirements, is_truncated)
+                else:
+                    print('Error parsing profile')
+                    sys.exit(1)
 
-        print_table_data(
-            [["Row", "Sequence#", "Format", "Flags", "Field String", "Child Count", "Offset"]]
-            +
-            schema_dictionary
-        )
+            num_entries, offset = add_dictionary_entries(dictionary, entity_repo, entity, is_parent_array=False)
+            dictionary = generate_dictionary(dictionary)
 
-        print_dictionary_summary(schema_dictionary)
+            print_table_data(
+                [["Row", "Sequence#", "Format", "Flags", "Field String", "Child Count", "Offset"]]
+                +
+                dictionary
+            )
 
-        entity_offset_map = {}
-        annotation_dictionary = generate_annotation_dictionary()
-        print_table_data(
-            [["Row", "Sequence#", "Format", "Flags", "Field String", "Child Count", "Offset"]]
-            +
-            annotation_dictionary
-        )
-        print_dictionary_summary(annotation_dictionary)
+            print_dictionary_summary(dictionary)
+            ver = get_latest_version_as_ver32(entity)
 
+        if args.source == 'annotation':
+            entity_offset_map = {}
+            dictionary = generate_annotation_dictionary()
+            print_table_data(
+                [["Row", "Sequence#", "Format", "Flags", "Field String", "Child Count", "Offset"]]
+                +
+                dictionary
+            )
+            print_dictionary_summary(dictionary)
+            ver = 0xF0F0F000  # TODO: fix version for annotation dictionary (maybe add cmd line param)
 
         # Generate binary dictionary file
         if args.outputFile:
-            dictionary_byte_array = generate_byte_array(schema_dictionary)
-            print_binary_dictionary(dictionary_byte_array)
+            dictionary_byte_array = generate_byte_array(dictionary, ver, False)
+            #  print_binary_dictionary(dictionary_byte_array)
             file = open(args.outputFile, 'wb')
             file.write(bytes(dictionary_byte_array))
             file.close()
