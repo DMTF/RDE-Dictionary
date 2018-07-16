@@ -674,7 +674,7 @@ Use the following example_profile.json to truncate the dictionary.
                 },
                 "Name": {
                     "ReadRequirement": "Mandatory",
-                    "Purpose": "Marketing name: [Manufacturer] [Advertised Drive Capacity]GB(or TB) [CapableSpeedGbs]G [Protocol] [MediaType] (e.g. HPE 300GB 12G SAS HDD)"
+                    "Purpose": "Marketing name: [Manufacturer] [Advertised Drive Capacity]GB(or TB) [CapableSpeedGbs]G [Protocol] [MediaType]"
                 },
                 "Status": {
                     "PropertyRequirements": {
@@ -760,7 +760,7 @@ Use the following example_profile.json to truncate the dictionary.
                                 },
                                 "ServiceLabel": {
                                     "ReadRequirement": "Mandatory",
-                                    "Purpose": "Port=X:Box=Y:Bay=Z format e.g. Port=1i:Box=1:Bay=5"
+                                    "Purpose": "Port=X:Box=Y:Bay=Z format"
                                 }
                             }
                         }
