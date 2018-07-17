@@ -20,6 +20,7 @@ from tabulate import tabulate
 import urllib.request
 import sys
 from collections import Counter
+from copy import deepcopy
 
 
 # dict to build a list of namespaces that will be used to build the d
@@ -50,6 +51,13 @@ DICTIONARY_ENTRY_OFFSET = 6
 
 ENTITY_REPO_TUPLE_TYPE_INDEX = 0
 ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX = 1
+
+ENTITY_REPO_ENTRY_SEQUENCE_NUMBER = 0
+ENTITY_REPO_ENTRY_PROPERTY_NAME = 1
+ENTITY_REPO_ENTRY_TYPE = 2
+ENTITY_REPO_ENTRY_FLAGS = 3
+ENTITY_REPO_ENTRY_REFERENCE = 4
+ENTITY_REPO_ENTRY_AUTO_EXPAND = 5
 
 
 def get_base_properties(entity_type):
@@ -611,6 +619,7 @@ def fix_annotations_sequence_numbers(annotation_dictionary, annotation_index, st
         annotation_dictionary[index][DICTIONARY_ENTRY_SEQUENCE_NUMBER] = \
             (annotation_dictionary[index][DICTIONARY_ENTRY_SEQUENCE_NUMBER] << 2) | stripe_factor
 
+
 def generate_annotation_dictionary():
     annotation_dictionary = []
     # TODO: Currently only local is supported
@@ -637,8 +646,92 @@ def generate_annotation_dictionary():
         fix_annotations_sequence_numbers(annotation_dictionary, odata_row_index,   0)
         fix_annotations_sequence_numbers(annotation_dictionary, message_row_index, 1)
         fix_annotations_sequence_numbers(annotation_dictionary, redfish_row_index, 2)
-
     return annotation_dictionary
+
+
+def truncate_entity_repo(entity_repo, entity, required_properties, is_truncated, enum_key = ""):
+    """Truncate the entity repository baseed on the required_properties dictionary."""
+    if entity in entity_repo:
+        if entity_repo[entity][ENTITY_REPO_TUPLE_TYPE_INDEX] == 'Set':
+            # The entity type is 'Set'.
+            # Recursively search for each member in the property list of the entity in the required
+            # properties dictionary. If the property does not exist in the required properties dictionary,
+            # remove it from the entity repo.
+            for property in reversed(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
+                is_required = False
+                for property[ENTITY_REPO_ENTRY_PROPERTY_NAME] in required_properties:
+                    is_required = True
+                    truncate_entity_repo(entity_repo, property[ENTITY_REPO_ENTRY_REFERENCE], required_properties, is_truncated, required)
+                    break
+                if is_required == False:
+                    entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].remove(property)
+                    is_truncated = True
+        if entity_repo[entity][ENTITY_REPO_TUPLE_TYPE_INDEX] == 'Enum':
+            # The entity type is 'Enum'.
+            # No recursion is necessary, but the enum list must be trimmed such that it is a union of
+            # all valid values of all properties that use this enum.
+
+            # First, create an untruncated reference version of the entity if it does not exist and
+            # clear the 'real' entity which will be used to generate the dictionary.
+            untruncated_entity = entity + ".Untruncated"
+            if untruncated_entity not in entity_repo:
+                entity_repo[untruncated_entity] = deepcopy(entity_repo[entity])
+                entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].clear()
+            # If the required property does not have an specified list of values, assume that all enum
+            # values are valid.
+            add_all = True if len(required_properties[enum_key]) == 0 else False
+            if not add_all:
+                is_truncated = True
+            # Traverse the untrunctaed entity entry. If the entry exists in the required properties value
+            # list, add it to the 'real' entity.
+            for enum_val in entity_repo[untruncated_entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]:
+                if add_all or enum_val[ENTITY_REPO_ENTRY_PROPERTY_NAME] in required_properties[enum_key]:
+                    if enum_val not in entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]:
+                        entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].append(enum_val)
+
+
+def process_profile(json_profile, entity):
+    """Validate that the provided profile has a 'Resources' key and the target entity.
+
+    If the provided profile is valid, create a dictionary of required properties used to truncate the entity repo.
+    """
+    json_resource = None
+    required_properties = None
+    if "Resources" in json_profile:
+        profile_key = entity.split('.')[1]
+        if profile_key in json_profile["Resources"]:
+            json_resource = json_profile["Resources"][profile_key]
+    if json_resource:
+        required_properties = {}
+        build_requirements(json_resource, required_properties)
+    return required_properties
+
+
+def build_requirements(obj, required_properties):
+    """Generate a required_properties dictionary used to truncate the entity repository.
+
+    The required_properties dictionary is generated in a way such that every property specified in the
+    profile is converted into a key-value pair where:
+    - key = property name
+    - value = list of valid enums
+    For properties that are not enums, or that do not have valid enums specified, the value in the
+    key-value pair is an empty list.
+    """
+    for key in obj:
+        if key == 'PropertyRequirements':
+            for prop in obj[key].items():
+                enum_values = []
+                for child in prop[1]:
+                    if child == 'Values':
+                        enum_values = prop[1][child]
+                if prop[0] in required_properties:
+                    full_enum_values = required_properties[prop[0]] + [val for val in enum_values if val not in required_properties[prop[0]]]
+                    required_properties[prop[0]] = full_enum_values
+                else:
+                    required_properties[prop[0]] = enum_values
+    for val in obj.values():
+        if isinstance(val, dict):
+            build_requirements(val, required_properties)
 
 
 def dictionary_binary_header_size():
@@ -857,6 +950,7 @@ if __name__ == '__main__':
     local_parser.add_argument('--entity', type=str, required=True)
     local_parser.add_argument('--oemSchemaFilenames', nargs='*', type=str, required=False)
     local_parser.add_argument('--oemEntities', nargs='*', type=str, required=False)
+    local_parser.add_argument('--profile', type=str, required=False)
     local_parser.add_argument('--outputFile', type=str, required=False)
 
     dictionary_dump = subparsers.add_parser('view')
@@ -917,6 +1011,17 @@ if __name__ == '__main__':
 
     # search for entity and build dictionary
     if entity in entity_repo:
+        is_truncated = False
+        if args.profile:
+            with open(args.profile) as file:
+                json_profile = json.load(file)
+            # Fix up the profile
+            profile_requirements = process_profile(json_profile, entity)
+            if profile_requirements:
+                truncate_entity_repo(entity_repo, entity, profile_requirements, is_truncated)
+            else:
+                print('Error parsing profile')
+                sys.exit(1)
         schema_dictionary = []
         num_entries, offset = add_dictionary_entries(schema_dictionary, entity_repo, entity, is_parent_array=False)
         schema_dictionary = generate_dictionary(schema_dictionary)

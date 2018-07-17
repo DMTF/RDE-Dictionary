@@ -23,6 +23,7 @@ To upgrade already installed packages, use the command:
                                           --entity ENTITY
                                           [--oemSchemaFilenames [OEMSCHEMAFILENAMES [OEMSCHEMAFILENAMES ...]]]
                                           [--oemEntities [OEMENTITIES [OEMENTITIES ...]]]
+                                          [--profile PROFILE]
                                           [--outputFile OUTPUTFILE]
 
 ## Example
@@ -627,4 +628,280 @@ Total size: 2266
 ### Example for OEM extensions
 ```
 python rde_schema_dictionary_gen.py local --schemaDir "c:\Users\bnatraja\Development\redfish-forum-all\oem\Redfish" --schemaFilename Drive_v1.xml --entity Drive.Drive --oemSchemaFilenames OEM1DriveExt_v1.xml --oemEntities OEM1=OEM1DriveExt.OEM1DriveExt
+```
+
+### Example generating a truncated dictionary using a profile
+Use the following example_profile.json to truncate the dictionary.
+```
+{
+    "SchemaDefinition": "RedfishInteroperabilityProfile.v1_0_1",
+    "ProfileName": "Example Profile",
+    "ProfileVersion": "0.1",
+    "ContactInfo": "",
+    "RequiredProfiles": {
+        "DMTFBasic": {
+            "MinVersion": "1.0.0"
+        }
+    },
+    "Protocol": {
+        "MinVersion": "1.5",
+        "Discovery": "None",
+        "HostInterface": "None",
+        "ExpandQuery": "None",
+        "SelectQuery": "None",
+        "FilterQuery": "None"
+    },
+    "Resources": {
+        "Drive": {
+            "MinVersion": "1.5.0",
+            "Purpose": "Every implementation must have one or more drive resources",
+            "PropertyRequirements": {
+                "ReadRequirement": "Mandatory",
+                "@odata.context": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "@odata.id": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "@odata.etag": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "@odata.type": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "Id":{
+                    "ReadRequirement": "Mandatory"
+                },
+                "Name": {
+                    "ReadRequirement": "Mandatory",
+                    "Purpose": "Marketing name: [Manufacturer] [Advertised Drive Capacity]GB(or TB) [CapableSpeedGbs]G [Protocol] [MediaType]"
+                },
+                "Status": {
+                    "PropertyRequirements": {
+                        "State": {
+                            "ReadRequirement": "Mandatory",
+                            "Comparison": "AnyOf",
+                            "Values": ["Enabled", "Disabled", "StandbyOffline", "StandbySpare", "UnavailableOffline", "Updating"],
+                            "Purpose": "Enabled = Available as Raw SCSI or RAID, Disabled = Unconfigured, StandbyOffline = Offline due to bad import, StandbySpare = spare drive, UnavailableOffline = Failed, Updating = FW updates"
+                        },
+                        "Health": {
+                            "ReadRequirement": "Mandatory",
+                            "Purpose": "Health of the drive"
+                        }
+                    }
+                },
+                "IndicatorLED": {
+                    "ReadRequirement": "Mandatory",
+                    "Comparison": "AnyOf",
+                    "Values": ["Lit", "Off"]
+                },
+                "Model": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "Revision": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "CapacityBytes": {
+                    "ReadRequirement": "Mandatory",
+                    "Purpose": "Actual drive capacity"
+                },
+                "BlockSizeBytes": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "Protocol": {
+                    "ReadRequirement": "Mandatory",
+                    "Comparison": "AnyOf",
+                    "Values": ["SAS", "SATA", "NVMe"]
+                },
+                "MediaType": {
+                    "ReadRequirement": "Mandatory",
+                    "Comparison": "AnyOf",
+                    "Values": ["HDD", "SSD", "SMR"]
+                },
+                "Manufacturer": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "SerialNumber": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "StatusIndicator": {
+                    "ReadRequirement": "Mandatory",
+                    "Purpose": "SES status of drive",
+                    "Comparison": "AnyOf",
+                    "Values": ["OK", "Fail", "Rebuild", "PredictiveFailureAnalysis", "HotSpare"]
+                },
+                "Identifiers": {
+                    "ReadRequirement": "Mandatory",
+                    "MinCount": 1,
+                    "PropertyRequirements": {
+                        "DurableName": {
+                            "ReadRequirement": "Mandatory"
+                        },
+                        "DurableNameFormat": {
+                            "ReadRequirement": "Mandatory",
+                            "Comparison": "Equal",
+                            "Values": ["NAA"]
+                        }
+                    }
+                },
+                "PhysicalLocation": {
+                    "ReadRequirement": "Mandatory",
+                    "PropertyRequirements": {
+                        "PartLocation": {
+                            "ReadRequirement": "Mandatory",
+                            "PropertyRequirements": {
+                                "LocationOrdinalValue": {
+                                    "ReadRequirement": "Mandatory"
+                                },
+                                "LocationType": {
+                                    "ReadRequirement": "Mandatory",
+                                    "Comparison": "Equal",
+                                    "Values": ["Bay"]
+                                },
+                                "ServiceLabel": {
+                                    "ReadRequirement": "Mandatory",
+                                    "Purpose": "Port=X:Box=Y:Bay=Z format"
+                                }
+                            }
+                        }
+                    }
+                },
+                "RotationSpeedRPM": {
+                    "ReadRequirement": "Conditional",
+                    "ConditionalRequirements": [{
+                        "Purpose": "Applicable only if MediaType is HDD or SMR",
+                        "CompareProperty": "MediaType",
+                        "CompareType": "AnyOf",
+                        "CompareValues": ["HDD", "SMR"],
+                        "ReadRequirement": "Mandatory"
+                    }]
+                },
+                "CapableSpeedGbs": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "NegotiatedSpeedGbs": {
+                    "ReadRequirement": "Mandatory"
+                }
+            }
+        }
+    }
+}
+```
+```
+python rde_schema_dictionary_gen.py local --schemaDir "c:\Users\bnatraja\Development\redfish-forum-all\oem\Redfish" --schemaFilename Drive_v1.xml --entity Drive.Drive --profile example_profile.json
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|   Row |   Sequence# | Format   | Flags                              | Field String              |   Child Count | Offset   |
++=======+=============+==========+====================================+===========================+===============+==========+
+|     0 |           0 | Set      |                                    |                           |            18 | 1        |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|     1 |           2 | Integer  | Nullable=True,Permission=Read      | BlockSizeBytes            |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|     2 |           3 | Integer  | Nullable=True,Permission=Read      | CapableSpeedGbs           |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|     3 |           4 | Integer  | Nullable=True,Permission=Read      | CapacityBytes             |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|     4 |          10 | String   | Nullable=False,Permission=Read     | Id                        |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|     5 |          11 | Array    | Nullable=False,                    | Identifiers               |             1 | 19       |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|     6 |          12 | Enum     | Nullable=True,Permission=ReadWrite | IndicatorLED              |             2 | 22       |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|     7 |          15 | String   | Nullable=True,Permission=Read      | Manufacturer              |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|     8 |          16 | Enum     | Nullable=True,Permission=Read      | MediaType                 |             3 | 24       |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|     9 |          17 | String   | Nullable=True,Permission=Read      | Model                     |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    10 |          18 | String   | Nullable=False,Permission=Read     | Name                      |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    11 |          19 | Integer  | Nullable=True,Permission=Read      | NegotiatedSpeedGbs        |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    12 |          23 | Enum     | Nullable=True,Permission=Read      | Protocol                  |             3 | 27       |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    13 |          24 | String   | Nullable=True,Permission=Read      | Revision                  |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    14 |          25 | Integer  | Nullable=True,Permission=Read      | RotationSpeedRPM          |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    15 |          27 | String   | Nullable=True,Permission=Read      | SerialNumber              |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    16 |          28 | Set      | Nullable=False,                    | Status                    |             2 | 31       |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    17 |          29 | Enum     | Nullable=True,Permission=ReadWrite | StatusIndicator           |             4 | 33       |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    18 |          32 | Set      | Nullable=False,                    | PhysicalLocation          |             1 | 38       |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    19 |           0 | Set      |                                    |                           |             2 | 20       |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    20 |           0 | String   | Nullable=True,Permission=Read      | DurableName               |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    21 |           1 | Enum     | Nullable=True,Permission=Read      | DurableNameFormat         |             1 | 39       |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    22 |           0 | String   |                                    | Lit                       |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    23 |           2 | String   |                                    | Off                       |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    24 |           0 | String   |                                    | HDD                       |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    25 |           1 | String   |                                    | SSD                       |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    26 |           2 | String   |                                    | SMR                       |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    27 |           3 | String   |                                    | SAS                       |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    28 |           4 | String   |                                    | SATA                      |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    29 |           6 | String   |                                    | NVMe                      |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    30 |           0 | Set      |                                    |                           |             2 | 31       |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    31 |           0 | Enum     | Nullable=True,Permission=Read      | Health                    |             3 | 40       |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    32 |           3 | Enum     | Nullable=True,Permission=Read      | State                     |             6 | 43       |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    33 |           0 | String   |                                    | OK                        |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    34 |           1 | String   |                                    | Fail                      |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    35 |           2 | String   |                                    | Rebuild                   |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    36 |           3 | String   |                                    | PredictiveFailureAnalysis |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    37 |           0 | Set      |                                    |                           |             1 | 38       |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    38 |           5 | Set      | Nullable=True,                     | PartLocation              |             3 | 50       |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    39 |           0 | String   |                                    | NAA                       |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    40 |           0 | String   |                                    | OK                        |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    41 |           1 | String   |                                    | Warning                   |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    42 |           2 | String   |                                    | Critical                  |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    43 |           0 | String   |                                    | Enabled                   |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    44 |           1 | String   |                                    | Disabled                  |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    45 |           2 | String   |                                    | StandbyOffline            |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    46 |           3 | String   |                                    | StandbySpare              |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    47 |           7 | String   |                                    | UnavailableOffline        |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    48 |          10 | String   |                                    | Updating                  |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    49 |           0 | Set      |                                    |                           |             3 | 50       |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    50 |           0 | Integer  | Nullable=True,Permission=Read      | LocationOrdinalValue      |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    51 |           1 | Enum     | Nullable=True,Permission=Read      | LocationType              |             1 | 53       |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    52 |           4 | String   | Nullable=True,Permission=Read      | ServiceLabel              |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+|    53 |           1 | String   |                                    | Bay                       |             0 |          |
++-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
+Total Entries: 54
+Fixed size consumed: 702
+Field string size consumed: 445
+Total size: 1209
 ```
