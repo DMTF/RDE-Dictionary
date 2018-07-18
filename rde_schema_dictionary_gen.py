@@ -96,8 +96,7 @@ def get_primitive_type(property_type):
     m = re.compile('Edm\.(.*)').match(property_type)
     if m:  # primitive type?
         primitive_type = m.group(1)
-        if primitive_type == "DateTimeOffset" or primitive_type == "Duration" or primitive_type == "TimeOfDay" \
-                or primitive_type == "Guid":
+        if primitive_type == "DateTimeOffset" or primitive_type == "Duration" or primitive_type == "TimeOfDay" or primitive_type == "Guid":
             primitive_type = 'String'
         if ((primitive_type == "SByte") or (primitive_type == "Int16") or (primitive_type == "Int32") or
                 (primitive_type == "Int64") or (primitive_type == "Decimal")):
@@ -181,8 +180,8 @@ def get_properties(some_type, path='descendant-or-self::edm:Property | edm:Navig
                         properties.append([property_name, 'Set', property_flags, strip_version(property_type)])
                 elif complex_type.tag == ODATA_TYPE_DEFINITION:
                     assert(re.compile('Edm\..*').match(complex_type.get('UnderlyingType')))
-                    m = re.compile('Edm\.(.*)').match(complex_type.get('UnderlyingType'))
-                    properties.append([property_name, m.group(1), property_flags, ''])
+                    primitive_type = get_primitive_type(complex_type.get('UnderlyingType'))
+                    properties.append([property_name, primitive_type, property_flags, ''])
                 else:
                     if args.verbose:
                         print(complex_type.tag)
@@ -526,7 +525,7 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity, is_parent_arr
 
 def print_dictionary_summary(dictionary):
     print("Total Entries:", len(dictionary))
-    print("Fixed size consumed:", 13 * len(dictionary))
+    print("Fixed size consumed:", dictionary_binary_header_size() + dictonary_binary_entry_size() * len(dictionary))
     # calculate size of free form property names:
     total_field_string_size = 0
     for item in dictionary:
@@ -780,13 +779,12 @@ def dictonary_binary_entry_size():
 
 
 def dictionary_binary_size(dictionary):
-
     total_field_string_size = 0
     for item in dictionary:
-        total_field_string_size = total_field_string_size + len(item[DICTIONARY_ENTRY_FIELD_STRING]) \
-                                  + 1  # for null termination
-
-    return dictionary_binary_header_size() + len(dictionary) *  dictonary_binary_entry_size() + total_field_string_size
+        if len(item[DICTIONARY_ENTRY_FIELD_STRING]):
+            total_field_string_size = total_field_string_size + len(item[DICTIONARY_ENTRY_FIELD_STRING]) \
+                                   + 1  # for null termination
+    return dictionary_binary_header_size() + len(dictionary) * dictonary_binary_entry_size() + total_field_string_size
 
 
 def binary_offset_from_dictionary_offset(offset):
