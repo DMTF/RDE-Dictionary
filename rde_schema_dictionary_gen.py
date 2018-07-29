@@ -525,7 +525,7 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity, is_parent_arr
 
 def print_dictionary_summary(dictionary):
     print("Total Entries:", len(dictionary))
-    print("Fixed size consumed:", dictionary_binary_header_size() + dictonary_binary_entry_size() * len(dictionary))
+    print("Fixed size consumed:", dictionary_binary_header_size() + dictionary_binary_entry_size() * len(dictionary))
     # calculate size of free form property names:
     total_field_string_size = 0
     for item in dictionary:
@@ -764,7 +764,7 @@ def dictionary_binary_header_size():
     return version_tag_size + dictionary_flags_size + schema_version_size + entry_count_size + dictionary_size_size
 
 
-def dictonary_binary_entry_size():
+def dictionary_binary_entry_size():
     entry_format_size = 1
     entry_sequence_number_size = 2
     entry_child_pointer_offset_size = 2
@@ -784,23 +784,23 @@ def dictionary_binary_size(dictionary):
         if len(item[DICTIONARY_ENTRY_FIELD_STRING]):
             total_field_string_size = total_field_string_size + len(item[DICTIONARY_ENTRY_FIELD_STRING]) \
                                    + 1  # for null termination
-    return dictionary_binary_header_size() + len(dictionary) * dictonary_binary_entry_size() + total_field_string_size
+    return dictionary_binary_header_size() + len(dictionary) * dictionary_binary_entry_size() + total_field_string_size
 
 
 def binary_offset_from_dictionary_offset(offset):
-    return dictionary_binary_header_size() + (offset * dictonary_binary_entry_size()) - 1
+    return dictionary_binary_header_size() + (offset * dictionary_binary_entry_size())
 
 
 def dictionary_offset_from_binary_offset(offset):
     if offset:
-        return (offset - dictionary_binary_header_size() + 1)/dictonary_binary_entry_size()
+        return (offset - dictionary_binary_header_size() + 1)/dictionary_binary_entry_size()
     else:
         return offset
 
 bej_format_table = {
     'Set':          0x00,
     'Array':        0x01,
-    'Integer':      0x02,
+    'Integer':      0x03,
     'Enum':         0x04,
     'String':       0x05,
     'Boolean':      0x07,
@@ -850,7 +850,7 @@ def generate_byte_array(dictionary, version, is_truncated):
     binary_data.extend(dictionary_binary_size(dictionary).to_bytes(4, 'little', signed=False))  # DictionarySize
 
     # track property name offsets, this is initialized to the first property name
-    name_offset = dictionary_binary_header_size() + (len(dictionary) * dictonary_binary_entry_size())
+    name_offset = dictionary_binary_header_size() + (len(dictionary) * dictionary_binary_entry_size())
 
     # Add the fixed sized entries
     for item in dictionary:
@@ -917,6 +917,10 @@ class DictionaryByteArrayStream:
         return value
 
 
+    def get_current_offset(self):
+        return self._current_index
+
+
 def print_binary_dictionary(byte_array):
     stream = DictionaryByteArrayStream(byte_array)
 
@@ -932,6 +936,7 @@ def print_binary_dictionary(byte_array):
     table = []
     current_entry = 0
     while current_entry < total_entries:
+        current_offset = stream.get_current_offset()
         format = stream.get_int(1)
         format_str = from_bej_format(format)
         format_flags = ''
@@ -952,7 +957,7 @@ def print_binary_dictionary(byte_array):
         if name_length > 0:
             name = "".join(map(chr, byte_array[name_offset:name_offset+name_length]))
 
-        table.append([current_entry, sequence, format_str, format_flags, name, child_count, dictionary_offset_from_binary_offset(offset)])
+        table.append([str(current_entry)+'('+str(current_offset)+')', sequence, format_str, format_flags, name, child_count, str(dictionary_offset_from_binary_offset(offset))+'('+str(offset)+')'])
         current_entry += 1
 
     print_table_data(
