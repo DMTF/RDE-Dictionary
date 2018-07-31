@@ -476,11 +476,11 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity, is_parent_arr
             return 1, start
             # return 0, 0
 
-        # For a set add a row indicating this is a set
+        # For a set or enum add a row indicating this is a set or enum
         child_count = 0
         offset = start
-        if entity_type == 'Set':
-            add_dictionary_row(schema_dictionary, start, 0, 'Set', '', '',
+        if entity_type == 'Set' or entity_type == 'Enum':
+            add_dictionary_row(schema_dictionary, start, 0, entity_type, '', '',
                                len(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]), start + 1)
             child_count = 1
             start = start + 1
