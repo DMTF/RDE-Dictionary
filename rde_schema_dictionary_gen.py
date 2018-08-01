@@ -576,10 +576,10 @@ def generate_dictionary(dictionary, optimize_duplicate_items=True):
 
                 tmp_dictionary[index][DICTIONARY_ENTRY_OFFSET] = ''
                 if offset != 0:
-                    # The offset returned in the case of a Set is a Set entry pointing to a list of children.
-                    # If the parent is a property that is a Set, we only need the property entry to point to the first
-                    # child and encode the child count in the parent property entry itself.
-                    if item[DICTIONARY_ENTRY_FORMAT] == 'Set':
+                    # The offset returned in the case of a Set or Enum is a Set or Enum entry pointing to a list of
+                    # children. If the parent is a property that is a Set or Enum, we only need the property entry to
+                    # point to the first child and encode the child count in the parent property entry itself.
+                    if item[DICTIONARY_ENTRY_FORMAT] == 'Set' or item[DICTIONARY_ENTRY_FORMAT] == 'Enum':
                         tmp_dictionary[index][DICTIONARY_ENTRY_OFFSET] = offset + 1
                         tmp_dictionary[index][DICTIONARY_ENTRY_CHILD_COUNT] = \
                             tmp_dictionary[offset][DICTIONARY_ENTRY_CHILD_COUNT]
