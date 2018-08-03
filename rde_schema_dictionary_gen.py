@@ -804,7 +804,7 @@ bej_format_table = {
     'Enum':         0x04,
     'String':       0x05,
     'Boolean':      0x07,
-    'ResourceLink': 0x0F
+    'ResourceLink': 0x0E
 }
 
 
