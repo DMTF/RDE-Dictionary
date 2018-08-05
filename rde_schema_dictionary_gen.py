@@ -615,7 +615,10 @@ def add_odata_annotations(annotation_dictionary, odata_annotation_location):
         bej_format = ''
         json_format = v['type']
         if json_format == 'string':
-            bej_format = 'String'
+            if k == 'id':  # special case odata.id to be a resource link
+                bej_format = 'ResourceLink'
+            else:
+                bej_format = 'String'
         elif json_format == 'number':
             bej_format = 'Integer'
         elif json_format == 'object':
