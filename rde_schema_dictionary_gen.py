@@ -347,7 +347,7 @@ def get_latest_version_as_ver32(entity):
     """
 
     # search the namespaces for all 'entity.vMajor_Minor_Errata'
-    result = [key for key, value in includeNamespaces.items() if key.startswith(entity.split('.')[1])]
+    result = [key for key, value in includeNamespaces.items() if key.startswith(entity.split('.')[1]+'.')]
 
     # The last item in result will have the latest version
     if len(result) > 1:  # This is a versioned namespace
