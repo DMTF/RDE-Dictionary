@@ -796,7 +796,7 @@ def binary_offset_from_dictionary_offset(offset):
 
 def dictionary_offset_from_binary_offset(offset):
     if offset:
-        return (offset - dictionary_binary_header_size() + 1)/dictionary_binary_entry_size()
+        return int((offset - dictionary_binary_header_size() + 1)/dictionary_binary_entry_size())
     else:
         return offset
 
