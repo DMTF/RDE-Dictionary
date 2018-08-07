@@ -7,3 +7,6 @@ python:
    
 install:
    - pip install -r requirements.txt
+   
+script:
+   - python rde_schema_dictionary_gen.py --help
