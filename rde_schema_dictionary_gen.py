@@ -175,7 +175,7 @@ def get_properties(some_type, path='descendant-or-self::edm:Property | edm:Navig
                     properties.append([property_name, 'Enum', property_flags, strip_version(property_type)])
                 elif complex_type.tag == ODATA_COMPLEX_TYPE or complex_type.tag == ODATA_ENTITY_TYPE:
                     if is_auto_expand_refs:
-                        properties.append([property_name, 'ResourceLink', property_flags, ''])
+                        properties.append([property_name, 'Set', property_flags, ''])
                     else:
                         properties.append([property_name, 'Set', property_flags, strip_version(property_type)])
                 elif complex_type.tag == ODATA_TYPE_DEFINITION:
