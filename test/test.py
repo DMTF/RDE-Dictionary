@@ -30,11 +30,11 @@ MAJOR_SCHEMA_DICTIONARY_LIST = [('Drive_v1.xml',
 if __name__ == '__main__':
 
     # Generate the annotation dictionary
-    os.system('python rde_schema_dictionary_gen.py annotation --schemaDir "test\schema" --outputFile annotation.bin')
+    os.system('python rde_schema_dictionary_gen.py annotation --schemaDir "test/schema" --outputFile annotation.bin')
 
     # Generate the major schema dictionaries
     for major_schema in MAJOR_SCHEMA_DICTIONARY_LIST:
-        dict_cmd = 'python rde_schema_dictionary_gen.py local --schemaDir "test\schema"  ' \
+        dict_cmd = 'python rde_schema_dictionary_gen.py local --schemaDir "test/schema"  ' \
               '--schemaFilename ' + major_schema[SPEC_INDEX_SCHEMA_FILENAME] + \
               ' --entity ' + major_schema[SPEC_INDEX_SCHEMA_ENTITY] + \
               (' --oemSchemaFilenames ' if  (major_schema[SPEC_INDEX_OEM_SCHEMA_FILENAMES] is not '')  else '') + \
@@ -49,7 +49,7 @@ if __name__ == '__main__':
         encode_cmd = 'python pldm_bej_encoder_decoder.py encode '\
                      '--schemaDictionary ' + major_schema[SPEC_INDEX_DICTIONARY_FILENAME] + \
                      ' --annotationDictionary annotation.bin ' \
-                     ' --jsonFile test\\' + major_schema[SPEC_INDEX_JSONFILE_TO_ENCODE] + \
+                     ' --jsonFile test/' + major_schema[SPEC_INDEX_JSONFILE_TO_ENCODE] + \
                      ' --bejOutputFile ' + major_schema[SPEC_INDEX_BEJ_ENCODED_FILE] + \
                      ' --pdrMapFile pdr.txt'
         print(encode_cmd)
