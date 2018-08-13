@@ -615,3 +615,187 @@ Fixed size consumed: 702
 Field string size consumed: 445
 Total size: 1209
 ```
+
+# pldm-bej-encoder-decoder
+
+## Example Encoding JSON into PLDM BEJ
+1. Create schema and annotation dictionaries for the schema that the input JSON object conforms to (this examples uses the Redfish Drive schema):
+```
+python rde_schema_dictionary_gen.py local --schemaDir "C:\path\to\schemas" --schemaFilename Drive_v1.xml --entity Drive.Drive --outputFile drive.bin
+
+python rde_schema_dictionary_gen.py annotation --schemaDir "C:\path\to\schemas" --outputFile annotation.bin
+```
+
+2. Use the encoder to encode the JSON file to PLDM BEJ format. The below example encodes the following drive JSON:
+```
+{
+    "@odata.id": "/redfish/v1/drives/1",
+    "@odata.type": "#Drive.v1_5_0.Drive",
+    "@odata.etag": "FBS4553345",
+    "Id": "Drive1",
+    "Name": "Disk Bay 1",
+    "Status": { "State": "Enabled", "Health": "OK" },
+    "IndicatorLED": "Lit",
+    "Model": "Consorto MM0500FBFVQ",
+    "Revision": "C1.1",
+    "CapacityBytes": 500105991946,
+    "BlockSizeBytes": 512,
+    "FailurePredicted": false,
+    "Protocol": "SAS",
+    "MediaType": "HDD",
+    "Manufacturer": "CONSORTO",
+    "SerialNumber": "9XF11DLF00009238W7LN",
+    "Identifiers": [
+        {
+            "DurableNameFormat": "NAA",
+            "DurableName": "5000C5004183A941"
+        }
+    ],
+    "PhysicalLocation": {
+       "PartLocation": {
+           "LocationOrdinalValue": 1,
+           "LocationType": "Bay",
+           "ServiceLabel": "Port=A:Bay=1"
+       }
+    },
+    "RotationSpeedRPM": 15000,
+    "CapableSpeedGbs": 12,
+    "NegotiatedSpeedGbs": 12,
+    "Operations": [
+       {
+           "OperationName": "Erasing",
+           "PercentageComplete": 20,
+           "AssociatedTask": {
+              "@odata.id": "/redfish/v1/Tasks/1"
+           }
+       },
+       {
+           "OperationName": "Rebuilding",
+           "PercentageComplete": 70,
+           "AssociatedTask": {
+              "@odata.id": "/redfish/v1/Tasks/2"
+           }
+       }
+    ],
+   "Links": {
+      "Volumes": [
+         { "@odata.id": "/redfish/v1/Volumes/1" },
+         { "@odata.id": "/redfish/v1/Volumes/2" },
+         { "@odata.id": "/redfish/v1/Volumes/3" }
+      ]
+   }
+}
+```
+
+Note: Specify a PDR map file to capture URLs to PDR mapping that can then later be used for decoding
+
+```
+python pldm_bej_encoder_decoder.py encode --schemaDictionary storage.bin --annotationDictionary annotation.bin --jsonFile storage.json --bejOutputFile storage_bej.bin --pdrMapFile pdr.txt
+```
+```
+JSON size: 1042
+0X000000: 00 F0 F0 F1 00 00 00 01 00 00 02 D8 01 01 17 01 ................
+0X000010: 09 E0 01 02 01 00 01 19 50 01 14 23 44 72 69 76 ........P..#Driv
+0X000020: 65 2E 76 31 5F 35 5F 30 2E 44 72 69 76 65 00 01 e.v1_5_0.Drive..
+0X000030: 29 50 01 0B 46 42 53 34 35 35 33 33 34 35 00 01 )P..FBS4553345..
+0X000040: 14 50 01 07 44 72 69 76 65 31 00 01 24 50 01 0B .P..Drive1..$P..
+0X000050: 44 69 73 6B 20 42 61 79 20 31 00 01 38 00 01 10 Disk.Bay.1..8...
+0X000060: 01 02 01 06 40 01 01 01 00 01 00 40 01 01 01 00 ....@......@....
+0X000070: 01 18 40 01 01 01 00 01 22 50 01 15 43 6F 6E 73 ..@....."P..Cons
+0X000080: 6F 72 74 6F 20 4D 4D 30 35 30 30 46 42 46 56 51 orto.MM0500FBFVQ
+0X000090: 00 01 30 50 01 05 43 31 2E 31 00 01 08 30 01 05 ..0P..C1.1...0..
+0X0000A0: 0A D7 A3 70 74 01 04 30 01 02 00 02 01 10 70 01 ...pt..0......p.
+0X0000B0: 01 00 01 2E 40 01 01 01 03 01 20 40 01 01 01 00 ....@......@....
+0X0000C0: 01 1E 50 01 09 43 4F 4E 53 4F 52 54 4F 00 01 36 ..P..CONSORTO..6
+0X0000D0: 50 01 15 39 58 46 31 31 44 4C 46 30 30 30 30 39 P..9XF11DLF00009
+0X0000E0: 32 33 38 57 37 4C 4E 00 01 16 10 01 26 01 01 01 238W7LN.....&...
+0X0000F0: 00 00 01 1F 01 02 01 02 40 01 01 01 00 01 00 50 ........@......P
+0X000100: 01 11 35 30 30 30 43 35 30 30 34 31 38 33 41 39 ..5000C5004183A9
+0X000110: 34 31 00 01 40 00 01 28 01 01 01 0A 00 01 21 01 41..@..(......!.
+0X000120: 03 01 00 30 01 01 01 01 02 40 01 01 01 01 01 08 ...0.....@......
+0X000130: 50 01 0D 50 6F 72 74 3D 41 3A 42 61 79 3D 31 00 P..Port=A:Bay=1.
+0X000140: 01 32 30 01 02 98 3A 01 06 30 01 01 0C 01 26 30 .20...:..0....&0
+0X000150: 01 01 0C 01 3C 10 01 55 01 02 01 00 00 01 23 01 ....<..U......#.
+0X000160: 03 01 02 50 01 08 45 72 61 73 69 6E 67 00 01 04 ...P..Erasing...
+0X000170: 30 01 01 14 01 00 00 01 09 01 01 01 09 E0 01 02 0...............
+0X000180: 01 01 01 02 00 01 26 01 03 01 02 50 01 0B 52 65 ......&....P..Re
+0X000190: 62 75 69 6C 64 69 6E 67 00 01 04 30 01 01 46 01 building...0..F.
+0X0001A0: 00 00 01 09 01 01 01 09 E0 01 02 01 02 01 1A 00 ................
+0X0001B0: 01 33 01 01 01 02 10 01 2C 01 03 01 00 00 01 09 .3......,.......
+0X0001C0: 01 01 01 09 E0 01 02 01 03 01 02 00 01 09 01 01 ................
+0X0001D0: 01 09 E0 01 02 01 04 01 04 00 01 09 01 01 01 09 ................
+0X0001E0: E0 01 02 01 05
+Total encode size: 485
+```
+
+## Example Decoding PLDM BEJ into JSON
+```
+python pldm_bej_encoder_decoder.py decode --schemaDictionary drive.bin --annotationDictionary annotation.bin --bejEncodedFile drive_bej.bin --pdrMapFile pdr.txt
+
+{
+   "@odata.id": "/redfish/v1/drives/1",
+   "@odata.type": "#Drive.v1_5_0.Drive",
+   "@odata.etag": "FBS4553345",
+   "Id": "Drive1",
+   "Name": "Disk Bay 1",
+   "Status": {
+      "State": "Enabled",
+      "Health": "OK"
+   },
+   "IndicatorLED": "Lit",
+   "Model": "Consorto MM0500FBFVQ",
+   "Revision": "C1.1",
+   "CapacityBytes": 500105991946,
+   "BlockSizeBytes": 512,
+   "FailurePredicted": false,
+   "Protocol": "SAS",
+   "MediaType": "HDD",
+   "Manufacturer": "CONSORTO",
+   "SerialNumber": "9XF11DLF00009238W7LN",
+   "Identifiers": [
+      {
+         "DurableNameFormat": "NAA",
+         "DurableName": "5000C5004183A941"
+      }
+   ],
+   "PhysicalLocation": {
+      "PartLocation": {
+         "LocationOrdinalValue": 1,
+         "LocationType": "Bay",
+         "ServiceLabel": "Port=A:Bay=1"
+      }
+   },
+   "RotationSpeedRPM": 15000,
+   "CapableSpeedGbs": 12,
+   "NegotiatedSpeedGbs": 12,
+   "Operations": [
+      {
+         "OperationName": "Erasing",
+         "PercentageComplete": 20,
+         "AssociatedTask": {
+            "@odata.id": "/redfish/v1/Tasks/1"
+         }
+      },
+      {
+         "OperationName": "Rebuilding",
+         "PercentageComplete": 70,
+         "AssociatedTask": {
+            "@odata.id": "/redfish/v1/Tasks/2"
+         }
+      }
+   ],
+   "Links": {
+      "Volumes": [
+         {
+            "@odata.id": "/redfish/v1/Volumes/1"
+         },
+         {
+            "@odata.id": "/redfish/v1/Volumes/2"
+         },
+         {
+            "@odata.id": "/redfish/v1/Volumes/3"
+         }
+      ]
+   }
+}
+```
