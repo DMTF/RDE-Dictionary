@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/bnatrajan/rde-dictionary-builder/#&branch=master)](https://travis-ci.org/bnatrajan/rde-dictionary-builder/#)
+[![Build Status](https://travis-ci.org/bnatrajan/rde-dictionary-builder.svg?branch=master)](https://travis-ci.org/bnatrajan/rde-dictionary-builder)
 
 
 # rde-dictionary-builder
