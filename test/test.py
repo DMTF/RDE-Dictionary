@@ -63,6 +63,6 @@ if __name__ == '__main__':
         decode_file = os.popen(decode_cmd).read()
 
         # compare the decode with the original
-        assert(json.loads(decode_file) == json.load(open('test\\'+major_schema[SPEC_INDEX_JSONFILE_TO_ENCODE])))
+        assert(json.loads(decode_file) == json.load(open('test/'+major_schema[SPEC_INDEX_JSONFILE_TO_ENCODE])))
 
     exit(code=0)
