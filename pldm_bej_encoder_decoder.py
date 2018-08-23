@@ -870,21 +870,17 @@ if __name__ == '__main__':
         else:  # read from stdin
             json_str = sys.stdin.read()
 
-        total_chars = 0
-        for line in json_str:
-            cleanedLine = line.strip()
-            if cleanedLine:  # is not empty
-                total_chars += len(cleanedLine)
-        print('JSON size:', total_chars)
-
         json_to_encode = json.loads(json_str)
+        total_json_size = len(json.dumps(json_to_encode, separators=(',', ':')))
 
         # create a byte stream
         output_stream = io.BytesIO()
         bej_encode(output_stream, json_to_encode, schema_dictionary, annotation_dictionary)
         encoded_bytes = output_stream.getvalue()
         print_hex(encoded_bytes)
+        print('JSON size:', total_json_size)
         print('Total encode size:', len(encoded_bytes))
+        print('Compression ratio(%):', (1.0 - len(encoded_bytes)/total_json_size)*100)
 
         if args.bejOutputFile:
             args.bejOutputFile.write(encoded_bytes)

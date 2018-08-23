@@ -21,6 +21,7 @@ import urllib.request
 import sys
 from collections import Counter
 from copy import deepcopy
+import binascii
 
 
 # dict to build a list of namespaces that will be used to build the d
@@ -523,15 +524,32 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity, is_parent_arr
     return 0, 0
 
 
-def print_dictionary_summary(dictionary):
+def generate_json_dictionary(output_stream, dictionary, dictionary_byte_array, entity, ver):
+    summary = {}
+
+    summary['schema_name'] = entity
+    summary['schema_version'] = ver
+
+    assert(dictionary_binary_size(dictionary) == len(dictionary_byte_array))
+    summary['schema_dictionary_length_bytes'] = dictionary_binary_size(dictionary)
+    summary['schema_dictionary_crc_32'] = binascii.crc32(bytes(dictionary_byte_array))
+    summary['schema_dictionary_bytes'] = dictionary_byte_array
+    assert(len(summary['schema_dictionary_bytes']) == summary['schema_dictionary_length_bytes'])
+
+    output_stream.write(json.dumps(summary))
+
+
+def print_dictionary_summary(dictionary, dictionary_byte_array):
+
     print("Total Entries:", len(dictionary))
-    print("Fixed size consumed:", dictionary_binary_header_size() + dictionary_binary_entry_size() * len(dictionary))
+    print("Fixed size consumed (bytes):", dictionary_binary_header_size() + dictionary_binary_entry_size() * len(dictionary))
     # calculate size of free form property names:
     total_field_string_size = 0
     for item in dictionary:
         total_field_string_size = total_field_string_size + len(item[DICTIONARY_ENTRY_FIELD_STRING])
-    print("Field string size consumed:", total_field_string_size)
-    print('Total size:', dictionary_binary_size(dictionary))
+    print("Field string size consumed (bytes):", total_field_string_size)
+    print('Total size (bytes):', dictionary_binary_size(dictionary))
+    print('Signature:', hex(binascii.crc32(bytes(dictionary_byte_array))))
 
 
 entity_offset_map = {}
@@ -989,13 +1007,14 @@ if __name__ == '__main__':
     local_parser.add_argument('--oemSchemaFilenames', nargs='*', type=str, required=False)
     local_parser.add_argument('--oemEntities', nargs='*', type=str, required=False)
     local_parser.add_argument('--profile', type=str, required=False)
-    local_parser.add_argument('--outputFile', type=str, required=False)
+    local_parser.add_argument('--outputFile', type=argparse.FileType('wb'), required=False)
+    local_parser.add_argument('--outputJsonDictionaryFile', type=argparse.FileType('w'), required=False)
 
 
     annotation_parser = subparsers.add_parser('annotation')
     annotation_parser.add_argument('--schemaDir', type=str, required=True)
-    annotation_parser.add_argument('--outputFile', type=str, required=False)
-
+    annotation_parser.add_argument('--outputFile', type=argparse.FileType('wb'), required=False)
+    annotation_parser.add_argument('--outputJsonDictionaryFile', type=argparse.FileType('w'), required=False)
 
     dictionary_dump = subparsers.add_parser('view')
     dictionary_dump.add_argument('--file', type=str, required=True)
@@ -1086,7 +1105,6 @@ if __name__ == '__main__':
                 dictionary
             )
 
-            print_dictionary_summary(dictionary)
             ver = get_latest_version_as_ver32(entity)
 
         if args.source == 'annotation':
@@ -1097,16 +1115,19 @@ if __name__ == '__main__':
                 +
                 dictionary
             )
-            print_dictionary_summary(dictionary)
-            ver = 0xF0F0F000  # TODO: fix version for annotation dictionary (maybe add cmd line param)
+
+            ver = 0xF1F0F000  # TODO: fix version for annotation dictionary (maybe add cmd line param)
+            entity = 'Annotation'
+
+        dictionary_byte_array = generate_byte_array(dictionary, ver, False)
+        print_dictionary_summary(dictionary, dictionary_byte_array)
 
         # Generate binary dictionary file
         if args.outputFile:
-            dictionary_byte_array = generate_byte_array(dictionary, ver, False)
-            #  print_binary_dictionary(dictionary_byte_array)
-            file = open(args.outputFile, 'wb')
-            file.write(bytes(dictionary_byte_array))
-            file.close()
+            args.outputFile.write(bytes(dictionary_byte_array))
+
+        if args.outputJsonDictionaryFile:
+            generate_json_dictionary(args.outputJsonDictionaryFile, dictionary, dictionary_byte_array, entity, ver)
 
     else:
         print('Error, cannot find entity:', entity)

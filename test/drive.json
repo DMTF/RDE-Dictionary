@@ -53,13 +53,13 @@
    "Links": {
       "Volumes": [
          { 
-            "@odata.id": "/redfish/v1/Volumes/1" 
+            "@odata.id": "/redfish/v1/Systems/1/Storage/1/Volumes/1" 
          },
          { 
-            "@odata.id": "/redfish/v1/Volumes/2" 
+            "@odata.id": "/redfish/v1/Systems/1/Storage/1/Volumes/2" 
          },
          { 
-            "@odata.id": "/redfish/v1/Volumes/3" 
+            "@odata.id": "/redfish/v1/Systems/1/Storage/1/Volumes/3" 
          }
       ]
    },
