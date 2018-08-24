@@ -339,6 +339,17 @@ def add_namespaces(source, doc_list):
             add_namespaces(dependent_source, doc_list)
 
 
+def get_latest_version(entity):
+    # search the namespaces for all 'entity.vMajor_Minor_Errata'
+    result = [key for key, value in includeNamespaces.items() if key.startswith(entity.split('.')[1]+'.')]
+
+    # The last item in result will have the latest version
+    if len(result) > 1:  # This is a versioned namespace
+        return result[len(result) - 1].split('.')[1]
+    else:  # This is unversioned, return v0_0_0
+        return 'v0_0_0'
+
+
 def get_latest_version_as_ver32(entity):
     """
     Returns the latest version of the entity as a PLDM ver32 array of bytes
@@ -347,17 +358,15 @@ def get_latest_version_as_ver32(entity):
         entity: The EntityType or ComplexType in the format Namespace.Entity (e.g. Drive.Drive)
     """
 
-    # search the namespaces for all 'entity.vMajor_Minor_Errata'
-    result = [key for key, value in includeNamespaces.items() if key.startswith(entity.split('.')[1]+'.')]
+    version = get_latest_version(entity)
 
     # The last item in result will have the latest version
-    if len(result) > 1:  # This is a versioned namespace
-        ver = result[len(result) - 1].split('.')[1][1:].split('_')
-        verNumber = ((int(ver[0]) | 0xF0) << 24) | ((int(ver[1]) | 0xF0) << 16) | ((int(ver[2]) | 0xF0) << 8)
-        return verNumber
-    else:  # This is unversioned, return v0_0_0
+    if version != 'v0_0_0':  # This is a versioned namespace
+        ver_array = version[1:].split('_')   # skip the 'v' and split the major, minor and errata
+        ver_number = ((int(ver_array[0]) | 0xF0) << 24) | ((int(ver_array[1]) | 0xF0) << 16) | ((int(ver_array[2]) | 0xF0) << 8)
+        return ver_number
+    else:  # This is an un-versioned entity, return v0_0_0
         return 0xFFFFFFFF
-
 
 
 def find_enum(key, dictionary):
@@ -529,6 +538,7 @@ def generate_json_dictionary(output_stream, dictionary, dictionary_byte_array, e
 
     summary['schema_name'] = entity
     summary['schema_version'] = ver
+    summary['schema_url'] = 'https://redfish.dmtf.org/schemas/' + entity.split('.')[0] + '.' + get_latest_version(entity) + '.json'
 
     assert(dictionary_binary_size(dictionary) == len(dictionary_byte_array))
     summary['schema_dictionary_length_bytes'] = dictionary_binary_size(dictionary)
@@ -540,7 +550,6 @@ def generate_json_dictionary(output_stream, dictionary, dictionary_byte_array, e
 
 
 def print_dictionary_summary(dictionary, dictionary_byte_array):
-
     print("Total Entries:", len(dictionary))
     print("Fixed size consumed (bytes):", dictionary_binary_header_size() + dictionary_binary_entry_size() * len(dictionary))
     # calculate size of free form property names:
