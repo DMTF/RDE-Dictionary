@@ -11,6 +11,16 @@
        "State": "Enabled", 
        "Health": "Warning" 
     },
+    "Status@Message.ExtendedInfo": [
+        {
+            "MessageId": "PredictiveFailure",
+            "Severity": "Warning"
+        },
+        {
+            "MessageId": "LinkFailure",
+            "Severity": "Warning"
+        }
+    ],
     "CapacityBytes": 500105991946,
     "BlockSizeBytes": 512,
     "Identifiers": [
