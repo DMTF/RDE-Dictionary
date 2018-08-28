@@ -777,14 +777,14 @@ def get_annotation_dictionary_entries_from_seq(annot_seq, annotation_dictionary)
     return {}
 
 
-def bej_decode_stream(schema_dict, annotation_dict, entries_by_seq, prop_count, is_parent_array, add_name=True):
+def bej_decode_stream(schema_dict, annotation_dict, entries_by_seq, prop_count, is_seq_array_index, add_name=True):
     index = 0
     while input_stream.tell() < get_stream_size(input_stream) and index < prop_count:
         format = bej_typeof(input_stream)
 
         if format == BEJ_FORMAT_SET:
             [seq, selector], count = bej_unpack_set_start(input_stream)
-            if is_parent_array:
+            if is_seq_array_index:
                 seq = 0
             entry = entries_by_seq[seq]
 
@@ -797,7 +797,7 @@ def bej_decode_stream(schema_dict, annotation_dict, entries_by_seq, prop_count, 
             bej_decode_stream(schema_dict, annotation_dict,
                               load_dictionary_subset_by_key_sequence(
                                   dict_to_use, entry[DICTIONARY_ENTRY_OFFSET], entry[DICTIONARY_ENTRY_CHILD_COUNT]),
-                              prop_count=count, is_parent_array=False)
+                              prop_count=count, is_seq_array_index=False)
             output_stream.write('}')
 
         elif format == BEJ_FORMAT_STRING:
@@ -830,7 +830,7 @@ def bej_decode_stream(schema_dict, annotation_dict, entries_by_seq, prop_count, 
 
         elif format == BEJ_FORMAT_ENUM:
             [seq, selector], value = bej_unpack_sflv_enum(input_stream)
-            if is_parent_array:
+            if is_seq_array_index:
                 seq = 0
 
             if add_name:
@@ -841,7 +841,7 @@ def bej_decode_stream(schema_dict, annotation_dict, entries_by_seq, prop_count, 
 
         elif format == BEJ_FORMAT_ARRAY:
             [seq, selector], array_member_count = bej_unpack_array_start(input_stream)
-            if is_parent_array:
+            if is_seq_array_index:
                 seq = 0
 
             entry = entries_by_seq[seq]
@@ -855,7 +855,7 @@ def bej_decode_stream(schema_dict, annotation_dict, entries_by_seq, prop_count, 
                 bej_decode_stream(schema_dict, annotation_dict,
                                   load_dictionary_subset_by_key_sequence(dict_to_use, entry[DICTIONARY_ENTRY_OFFSET],
                                                                          entry[DICTIONARY_ENTRY_CHILD_COUNT]),
-                                  prop_count=1, is_parent_array=True, add_name=False)
+                                  prop_count=1, is_seq_array_index=True, add_name=False)
                 if i < array_member_count-1:
                     output_stream.write(',')
 
@@ -877,7 +877,7 @@ def bej_decode_stream(schema_dict, annotation_dict, entries_by_seq, prop_count, 
 
             bej_decode_stream(schema_dict, annotation_dict,
                               get_annotation_dictionary_entries_from_seq(annot_seq, annotation_dict),
-                              prop_count=1, is_parent_array=False, add_name=False)
+                              prop_count=1, is_seq_array_index=False, add_name=False)
         else:
             print('Unable to decode')
             exit()
@@ -900,7 +900,7 @@ def bej_decode(schema_dictionary, annotation_dictionary):
 
     bej_decode_stream(schema_dictionary, annotation_dictionary,
                       load_dictionary_subset_by_key_sequence(schema_dictionary, 0, -1),
-                      1, False)
+                      1, is_seq_array_index=False)
 
 
 if __name__ == '__main__':
