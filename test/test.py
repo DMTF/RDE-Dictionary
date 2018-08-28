@@ -1,7 +1,6 @@
 import json
 import os
 
-
 SPEC_INDEX_SCHEMA_FILENAME = 0
 SPEC_INDEX_SCHEMA_ENTITY = 1
 SPEC_INDEX_OEM_SCHEMA_FILENAMES = 2
@@ -30,6 +29,7 @@ MAJOR_SCHEMA_DICTIONARY_LIST = [('Drive_v1.xml',
 if __name__ == '__main__':
 
     # Generate the annotation dictionary
+    print('Generating annotation dictionary...')
     os.system('python rde_schema_dictionary_gen.py annotation --schemaDir "test/schema" --outputFile annotation.bin')
 
     # Generate the major schema dictionaries
@@ -63,6 +63,7 @@ if __name__ == '__main__':
         decode_file = os.popen(decode_cmd).read()
 
         # compare the decode with the original
+        print('Decoded JSON:')
+        print(json.dumps(json.loads(decode_file), indent=3))
         assert(json.loads(decode_file) == json.load(open('test/'+major_schema[SPEC_INDEX_JSONFILE_TO_ENCODE])))
-
     exit(code=0)
