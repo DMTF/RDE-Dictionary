@@ -21,17 +21,22 @@ To upgrade already installed packages, use the command:
 * `python rde_schema_dictionary_gen.py [-h] [--verbose] {local,annotation,view} ...`
 * `local options`:
 
-            rde_schema_dictionary_gen.py local [-h] --schemaDir SCHEMADIR
+            rde_schema_dictionary_gen.py local [-h] --csdlSchemaDirectories
+                                          [CSDLSCHEMADIRECTORIES [CSDLSCHEMADIRECTORIES ...]]
+                                          --jsonSchemaDirectories
+                                          [JSONSCHEMADIRECTORIES [JSONSCHEMADIRECTORIES ...]]
                                           --schemaFilename SCHEMAFILENAME
                                           --entity ENTITY
                                           [--oemSchemaFilenames [OEMSCHEMAFILENAMES [OEMSCHEMAFILENAMES ...]]]
                                           [--oemEntities [OEMENTITIES [OEMENTITIES ...]]]
                                           [--profile PROFILE]
                                           [--outputFile OUTPUTFILE]
-
+                                          [--outputJsonDictionaryFile OUTPUTJSONDICTIONARYFILE]
+                                          
+          
 ## Example
 ```
-python rde_schema_dictionary_gen.py local --schemaDir c:\path\to\schema\files\ --schemaFilename Drive_v1.xml --entity Drive.Drive
+python rde_schema_dictionary_gen.py local --csdlSchemaDirectories test/schema/metadata  test/schema/oem-csdl --jsonSchemaDirectories test/schema/json-schema --schemaFilename Drive_v1.xml --entity Drive.Drive --outputFile drive.bin
 
 +-------+-------------+--------------+------------------------------------+-------------------------------+---------------+----------+
 |   Row |   Sequence# | Format       | Flags                              | Field String                  |   Child Count | Offset   |
@@ -108,7 +113,7 @@ Total size: 4450
 
 ### Example for annotations
 ```
-python36 rde_schema_dictionary_gen.py annotation --schemaDir "c:\path\to\schema" 
+python rde_schema_dictionary_gen.py annotation --csdlSchemaDirectories test/schema/metadata --jsonSchemaDirectories test/schema/json-schema --outputFile annotation.bin 
 
 +-------+-------------+--------------+-------------------------------------+------------------------------------+---------------+----------+
 |   Row |   Sequence# | Format       | Flags                               | Field String                       |   Child Count | Offset   |
@@ -335,15 +340,16 @@ python36 rde_schema_dictionary_gen.py annotation --schemaDir "c:\path\to\schema"
 +-------+-------------+--------------+-------------------------------------+------------------------------------+---------------+----------+
 |   110 |           0 | Set          |                                     |                                    |             0 |          |
 +-------+-------------+--------------+-------------------------------------+------------------------------------+---------------+----------+
-Total Entries: 111
-Fixed size consumed: 1443
-Field string size consumed: 1286
-Total size: 2852
+Total Entries: 126
+Fixed size consumed (bytes): 1650
+Field string size consumed (bytes): 1430
+Total size (bytes): 3185
+Signature: 0x9ce80ba1
 ```
 
 ### Example for OEM extensions
 ```
-python rde_schema_dictionary_gen.py local --schemaDir "c:\path\to\schema" --schemaFilename Drive_v1.xml --entity Drive.Drive --oemSchemaFilenames OEM1DriveExt_v1.xml --oemEntities OEM1=OEM1DriveExt.OEM1DriveExt
+python rde_schema_dictionary_gen.py local --csdlSchemaDirectories test/schema/metadata  test/schema/oem-csdl --jsonSchemaDirectories test/schema/json-schema --schemaFilename Drive_v1.xml --entity Drive.Drive --oemSchemaFilenames OEM1DriveExt_v1.xml OEM2DriveExt_v1.xml --oemEntities OEM1=OEM1DriveExt.OEM1DriveExt OEM2=OEM2DriveExt.OEM2DriveExt --outputFile drive.bin
 ```
 
 ### Example generating a truncated dictionary using a profile
@@ -501,7 +507,7 @@ Use the following example_profile.json to truncate the dictionary.
 }
 ```
 ```
-python rde_schema_dictionary_gen.py local --schemaDir "c:\path\to\redfish\schema" --schemaFilename Drive_v1.xml --entity Drive.Drive --profile example_profile.json
+python rde_schema_dictionary_gen.py local --csdlSchemaDirectories test/schema/metadata  test/schema/oem-csdl --jsonSchemaDirectories test/schema/json-schema --schemaFilename Drive_v1.xml --entity Drive.Drive --profile example_profile.json
 +-------+-------------+----------+------------------------------------+---------------------------+---------------+----------+
 |   Row |   Sequence# | Format   | Flags                              | Field String              |   Child Count | Offset   |
 +=======+=============+==========+====================================+===========================+===============+==========+
@@ -624,9 +630,9 @@ Total size: 1209
 ## Example Encoding JSON into PLDM BEJ
 1. Create schema and annotation dictionaries for the schema that the input JSON object conforms to (this examples uses the Redfish Drive schema):
 ```
-python rde_schema_dictionary_gen.py local --schemaDir "C:\path\to\schemas" --schemaFilename Drive_v1.xml --entity Drive.Drive --outputFile drive.bin
+python rde_schema_dictionary_gen.py local --csdlSchemaDirectories test/schema/metadata  test/schema/oem-csdl --jsonSchemaDirectories test/schema/json-schema --schemaFilename Drive_v1.xml --entity Drive.Drive --outputFile drive.bin
 
-python rde_schema_dictionary_gen.py annotation --schemaDir "C:\path\to\schemas" --outputFile annotation.bin
+python rde_schema_dictionary_gen.py annotation --csdlSchemaDirectories test/schema/metadata --jsonSchemaDirectories test/schema/json-schema --outputFile annotation.bin
 ```
 
 2. Use the encoder to encode the JSON file to PLDM BEJ format. The below example encodes the following drive JSON:

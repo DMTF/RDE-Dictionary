@@ -22,6 +22,7 @@ import sys
 from collections import Counter
 from copy import deepcopy
 import binascii
+import os.path
 
 
 # dict to build a list of namespaces that will be used to build the d
@@ -294,6 +295,20 @@ def add_actions(doc, entity_repo):
         )
 
 
+def find_csdl_source(filename):
+    for csdl_dir in args.csdlSchemaDirectories:
+        if os.path.isfile(csdl_dir + '/' + filename):
+            return csdl_dir + '/' + filename
+    return ''
+
+
+def find_json_schema_source(filename):
+    for json_schema_dir in args.jsonSchemaDirectories:
+        if os.path.isfile(json_schema_dir + '/' + filename):
+            return json_schema_dir + '/' + filename
+    return ''
+
+
 def add_namespaces(source, doc_list):
     doc_name = source
     schema_string = ''
@@ -331,7 +346,8 @@ def add_namespaces(source, doc_list):
             if args.source == 'remote':
                 dependent_source = ref.get('Uri')
             else:
-                dependent_source = args.schemaDir + '/metadata/' + extract_doc_name_from_url(ref.get('Uri'))
+                dependent_source = find_csdl_source(extract_doc_name_from_url(ref.get('Uri')))
+
                 if os.path.exists(dependent_source) is False:
                     continue
                 if args.verbose:
@@ -387,20 +403,21 @@ def fix_enums(entity_repo, key):
         if args.verbose:
             print("Need to look at json schema to fix enums for", key, base_filename)
         enum_values = []
-        for file in os.listdir(args.schemaDir + '/json-schema/'):
-            if file.startswith(base_filename + '.'):
-                json_schema = json.load(open(args.schemaDir + '/json-schema/' + file))
-                # search json schema for enum
+        for json_schema_dir in args.jsonSchemaDirectories:
+            for file in os.listdir(json_schema_dir):
+                if file.startswith(base_filename + '.'):
+                    json_schema = json.load(open(json_schema_dir + '/' + file))
+                    # search json schema for enum
 
-                if args.verbose:
-                    print("Looking for", enum_name, "in", args.schemaDir + '/json-schema/' + file)
-                json_enum = find_enum(enum_name, json_schema)
-                if json_enum is not None:
                     if args.verbose:
-                        print(json_enum["enum"])
-                    enum_values = enum_values + list((Counter(json_enum["enum"]) - Counter(enum_values)).elements())
-                    if args.verbose:
-                        print(enum_values)
+                        print("Looking for", enum_name, "in", json_schema_dir + '/' + file)
+                    json_enum = find_enum(enum_name, json_schema)
+                    if json_enum is not None:
+                        if args.verbose:
+                            print(json_enum["enum"])
+                        enum_values = enum_values + list((Counter(json_enum["enum"]) - Counter(enum_values)).elements())
+                        if args.verbose:
+                            print(enum_values)
 
         if len(enum_values):
             # entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX] = [[enum] for enum in enum_values]
@@ -433,11 +450,14 @@ def get_base_type(child):
         m = re.compile('(.*)\.(\w*)').match(child.get('BaseType'))
         base_namespace = m.group(1)
         base_entity_name = m.group(2)
-        return includeNamespaces[base_namespace].xpath(
-            'child::edm:EntityType[@Name=\'%s\'] | child::edm:ComplexType[@Name=\'%s\']' % (base_entity_name,
-                                                                                            base_entity_name),
-            namespaces=ODATA_ALL_NAMESPACES)[0]
-
+        try:
+            return includeNamespaces[base_namespace].xpath(
+                'child::edm:EntityType[@Name=\'%s\'] | child::edm:ComplexType[@Name=\'%s\']' % (base_entity_name,
+                                                                                                base_entity_name),
+                namespaces=ODATA_ALL_NAMESPACES)[0]
+        except:
+            print(base_namespace, base_entity_name)
+            sys.exit()
 
 def is_parent_abstract(entity_type):
     base_entity = get_base_type(entity_type)
@@ -683,7 +703,7 @@ def generate_annotation_dictionary():
     add_dictionary_row(annotation_dictionary, redfish_row_index, 0, "Set", '', "Redfish", 0, 'Redfish')
     add_dictionary_row(annotation_dictionary, 4, 0, "Set", '', "reserved", 0, '')
 
-    odata_annotation_location = args.schemaDir + '/json-schema/' + 'odata.v4_0_2.json'
+    odata_annotation_location = find_json_schema_source('odata.v4_0_2.json')
     annotation_dictionary[1][DICTIONARY_ENTRY_CHILD_COUNT] = \
         add_odata_annotations(annotation_dictionary, odata_annotation_location)
 
@@ -1010,23 +1030,26 @@ if __name__ == '__main__':
     # remote_parser.add_argument('--outputFile', type=str, required=False)
 
     local_parser = subparsers.add_parser('local')
-    local_parser.add_argument('--schemaDir', type=str, required=True)
-    local_parser.add_argument('--schemaFilename', type=str, required=True)
-    local_parser.add_argument('--entity', type=str, required=True)
-    local_parser.add_argument('--oemSchemaFilenames', nargs='*', type=str, required=False)
-    local_parser.add_argument('--oemEntities', nargs='*', type=str, required=False)
-    local_parser.add_argument('--profile', type=str, required=False)
-    local_parser.add_argument('--outputFile', type=argparse.FileType('wb'), required=False)
-    local_parser.add_argument('--outputJsonDictionaryFile', type=argparse.FileType('w'), required=False)
+    #local_parser.add_argument('--schemaDir', type=str, required=False)
+    local_parser.add_argument('-cd', '--csdlSchemaDirectories', nargs='*', type=str, required=True)
+    local_parser.add_argument('-jd', '--jsonSchemaDirectories', nargs='*', type=str, required=True)
+    local_parser.add_argument('-f', '--schemaFilename', type=str, required=True)
+    local_parser.add_argument('-e', '--entity', type=str, required=True)
+    local_parser.add_argument('-oemf', '--oemSchemaFilenames', nargs='*', type=str, required=False)
+    local_parser.add_argument('-oem', '--oemEntities', nargs='*', type=str, required=False)
+    local_parser.add_argument('-p', '--profile', type=str, required=False)
+    local_parser.add_argument('-o', '--outputFile', type=argparse.FileType('wb'), required=False)
+    local_parser.add_argument('-oj', '--outputJsonDictionaryFile', type=argparse.FileType('w'), required=False)
 
 
     annotation_parser = subparsers.add_parser('annotation')
-    annotation_parser.add_argument('--schemaDir', type=str, required=True)
-    annotation_parser.add_argument('--outputFile', type=argparse.FileType('wb'), required=False)
-    annotation_parser.add_argument('--outputJsonDictionaryFile', type=argparse.FileType('w'), required=False)
+    annotation_parser.add_argument('-cd', '--csdlSchemaDirectories', nargs='*', type=str, required=True)
+    annotation_parser.add_argument('-jd', '--jsonSchemaDirectories', nargs='*', type=str, required=True)
+    annotation_parser.add_argument('-o', '--outputFile', type=argparse.FileType('wb'), required=False)
+    annotation_parser.add_argument('-oj', '--outputJsonDictionaryFile', type=argparse.FileType('w'), required=False)
 
     dictionary_dump = subparsers.add_parser('view')
-    dictionary_dump.add_argument('--file', type=str, required=True)
+    dictionary_dump.add_argument('-f', '--file', type=str, required=True)
 
     args = parser.parse_args()
 
@@ -1051,24 +1074,38 @@ if __name__ == '__main__':
 
     if args.source == 'local':
         entity = args.entity
-        source = args.schemaDir + '/' + 'metadata/' + args.schemaFilename
+
+        # compute source starting with the first csdl directory. The first one wins
+        source = args.schemaFilename
+        for csdl_dir in args.csdlSchemaDirectories:
+            if os.path.isfile(csdl_dir + '/' + args.schemaFilename):
+                source = csdl_dir + '/' + args.schemaFilename
+                break
+
         if args.oemSchemaFilenames:
-            for schemaFilename in args.oemSchemaFilenames:
-                oemSources.append(args.schemaDir + '/' + 'metadata/' + schemaFilename)
+            for schema_filename in args.oemSchemaFilenames:
+                for csdl_dir in args.csdlSchemaDirectories:
+                    if os.path.isfile(csdl_dir + '/' + schema_filename):
+                        oemSources.append(csdl_dir + '/' + schema_filename)
+
         if args.oemSchemaFilenames:
             oemEntityType = entity + '.Oem'
             # create a special entity for OEM and set the major entity's oem section to it
             entity_repo[oemEntityType] = ('Set', [])
             for oemEntityPair in args.oemEntities:
                 oemName, oemEntity = oemEntityPair.split('=')
-                entity_repo[oemEntityType][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].append([oemName, 'Set', '', oemEntity])
+                entity_repo[oemEntityType][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].append(
+                    [oemName, 'Set', '', oemEntity])
     elif args.source == 'remote':
         entity = args.entity
         source = args.schemaURL
     elif args.source == 'annotation':
         # Just choose a dummy complex type to start the annotation dictionary generation process
         entity = 'RedfishExtensions.PropertyPattern'
-        source = args.schemaDir + '/' + 'metadata/' + 'RedfishExtensions_v1.xml'
+        for csdl_dir in args.csdlSchemaDirectories:
+            if os.path.isfile(csdl_dir + '/' + 'RedfishExtensions_v1.xml'):
+                source = csdl_dir + '/' + 'RedfishExtensions_v1.xml'
+                break
 
     add_namespaces(source, doc_list)
     for oemSource in oemSources:

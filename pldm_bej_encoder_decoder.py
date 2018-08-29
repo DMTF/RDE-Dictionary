@@ -675,6 +675,8 @@ def bej_encode_stream(output_stream, json_data, schema_dict, annot_dict, dict_to
             else:
                 bej_encode_sflv(output_stream, schema_dict, annot_dict, tmp_dict_to_use, entry,
                                 sequence_number_with_dictionary_selector, prop_format, json_data[prop])
+        else:
+            print('Property cannot be encoded - missing dictionary entry', prop)
 
 
 def bej_encode(output_stream, json_data, schema_dict, annotation_dictionary):
@@ -909,17 +911,17 @@ if __name__ == '__main__':
     subparsers = parser.add_subparsers(dest='operation')
 
     encode_parser = subparsers.add_parser('encode')
-    encode_parser.add_argument('--schemaDictionary', type=argparse.FileType('rb'), required=True)
-    encode_parser.add_argument('--annotationDictionary', type=argparse.FileType('rb'), required=True)
-    encode_parser.add_argument('--jsonFile', type=argparse.FileType('r'), required=False)
-    encode_parser.add_argument('--bejOutputFile', type=argparse.FileType('wb'), required=False)
-    encode_parser.add_argument('--pdrMapFile', type=argparse.FileType('w'), required=False)
+    encode_parser.add_argument('-s',  '--schemaDictionary', type=argparse.FileType('rb'), required=True)
+    encode_parser.add_argument('-a',  '--annotationDictionary', type=argparse.FileType('rb'), required=True)
+    encode_parser.add_argument('-j',  '--jsonFile', type=argparse.FileType('r'), required=False)
+    encode_parser.add_argument('-o',  '--bejOutputFile', type=argparse.FileType('wb'), required=False)
+    encode_parser.add_argument('-op', '--pdrMapFile', type=argparse.FileType('w'), required=False)
 
     decode_parser = subparsers.add_parser('decode')
-    decode_parser.add_argument('--schemaDictionary', type=argparse.FileType('rb'), required=True)
-    decode_parser.add_argument('--annotationDictionary', type=argparse.FileType('rb'), required=True)
-    decode_parser.add_argument('--bejEncodedFile', type=argparse.FileType('rb'), required=True)
-    decode_parser.add_argument('--pdrMapFile', type=argparse.FileType('r'), required=False)
+    decode_parser.add_argument('-s', '--schemaDictionary', type=argparse.FileType('rb'), required=True)
+    decode_parser.add_argument('-a', '--annotationDictionary', type=argparse.FileType('rb'), required=True)
+    decode_parser.add_argument('-b', '--bejEncodedFile', type=argparse.FileType('rb'), required=True)
+    decode_parser.add_argument('-p', '--pdrMapFile', type=argparse.FileType('r'), required=False)
 
     args = parser.parse_args()
 

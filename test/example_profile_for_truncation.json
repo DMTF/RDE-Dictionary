@@ -1,0 +1,383 @@
+{
+    "SchemaDefinition": "RedfishInteroperabilityProfile.v1_0_1",
+    "ProfileName": "Example Profile",
+    "ProfileVersion": "0.0.1",
+    "Purpose": "Example Profile for truncating dictionaries",
+    "OwningEntity": "",
+    "ContactInfo": "",
+    "RequiredProfiles": {
+        "DMTFBasic": {
+            "MinVersion": "1.0.0"
+        }
+    },
+    "Protocol": {
+        "MinVersion": "1.6",
+        "Discovery": "None",
+        "HostInterface": "None",
+        "ExpandQuery": "None",
+        "SelectQuery": "None",
+        "FilterQuery": "None"
+    },
+    "Resources": {
+        "Storage": {
+            "MinVersion": "1.5.0",
+            "Purpose": "Every implementation must have a storage resource from which the other storage resources are available",
+            "ReadRequirement": "Mandatory",
+            "PropertyRequirements": {
+                "@odata.context": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "@odata.id": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "@odata.etag": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "@odata.type": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "Id":{
+                    "ReadRequirement": "Mandatory"
+                },
+                "Name": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "Drives@odata.count": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "Drives": {
+                    "ReadRequirement": "Mandatory",
+                    "MinCount": 0
+                },
+                "Volumes": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "Status": {
+                    "PropertyRequirements": {
+                        "HealthRollup": {
+                            "ReadRequirement": "Mandatory"
+                        }
+                    }
+                },
+                "StorageControllers": {
+                    "ReadRequirement": "Mandatory",
+                    "MinCount": 1,
+                    "PropertyRequirements": {
+                        "FirmwareVersion": {
+                            "ReadRequirement": "Mandatory"
+                        },
+                        "Identifiers": {
+                            "ReadRequirement": "Mandatory",
+                            "MinCount": 1,
+                            "PropertyRequirements": {
+                                "DurableName": {
+                                    "ReadRequirement": "Mandatory"
+                                },
+                                "DurableNameFormat": {
+                                    "ReadRequirement": "Mandatory",
+                                    "Comparison": "Equal",
+                                    "Values": ["NAA"]
+                                }
+                            }
+                        },
+                        "Location": {
+                            "ReadRequirement": "Mandatory",
+                            "PropertyRequirements": {
+                                "PartLocation": {
+                                    "ReadRequirement": "Mandatory",
+                                    "PropertyRequirements": {
+                                        "LocationOrdinalValue": {
+                                            "ReadRequirement": "Mandatory"
+                                        },
+                                        "LocationType": {
+                                            "ReadRequirement": "Mandatory",
+                                            "Comparison": "Equal",
+                                            "Values": ["Slot"]
+                                        },
+                                        "ServiceLabel": {
+                                            "ReadRequirement": "Mandatory",
+                                            "Purpose": "Human readable slot number e.g. Slot 2"
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "Manufacturer": {
+                            "ReadRequirement": "Mandatory"
+                        },
+                        "MemberId": {
+                            "ReadRequirement": "Mandatory"
+                        },
+                        "Model": {
+                            "ReadRequirement": "Mandatory"
+                        },
+                        "PartNumber": {
+                            "ReadRequirement": "Mandatory"
+                        },
+                        "SerialNumber": {
+                            "ReadRequirement": "Mandatory"
+                        },
+                        "SpeedGbps": {
+                            "ReadRequirement": "Recommended"
+                        },
+                        "SKU": {
+                            "ReadRequirement": "Mandatory"
+                        },
+                        "Status": {
+                            "PropertyRequirements": {
+                                "State": {
+                                    "ReadRequirement": "Mandatory",
+                                    "Comparison": "AnyOf",
+                                    "Values": ["Starting", "Enabled", "Updating"]
+                                },
+                                "Health": {
+                                    "ReadRequirement": "Mandatory"
+                                }
+                            }
+                        },
+                        "SupportedDeviceProtocols": {
+                            "ReadRequirement": "Mandatory",
+                            "MinCount": 2,
+                            "Comparison": "Equal",
+                            "Values": ["SAS", "SATA"]
+                        },
+                        "SupportedControllerProtocols": {
+                            "ReadRequirement": "Mandatory",
+                            "MinCount": 1,
+                            "Comparison": "Equal",
+                            "Values": ["PCIe"]
+                        },
+                        "CacheSummary": {
+                            "ReadRequirement": "Mandatory",
+                            "PropertyRequirements": {
+                                "TotalCacheSizeMiB": {
+                                    "ReadRequirement": "Mandatory"
+                                },
+                                "PersistentCacheSizeMiB": {
+                                    "ReadRequirement": "Mandatory"
+                                },
+                                "Status": {
+                                    "PropertyRequirements": {
+                                        "State": {
+                                            "ReadRequirement": "Mandatory",
+                                            "Comparison": "AnyOf",
+                                            "Values": ["Enabled", "Disabled", "StandbyOffline"]
+                                        },
+                                        "Health": {
+                                            "ReadRequirement": "Mandatory"
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "PCIeInterface": {
+                            "ReadRequirement": "Conditional",
+                            "ConditionalRequirements": [{
+                               "Purpose": "Applicable only if this has a host PCIe interface",
+                               "CompareProperty": "SupportedControllerProtocols",
+                               "CompareType": "AnyOf",
+                               "CompareValues": ["PCIe"],
+                               "ReadRequirement": "Mandatory"
+                            }],
+                            "PropertyRequirements": {
+                                "MaxPCIeType": {
+                                    "ReadRequirement": "Mandatory"
+                                },
+                                "PCIeType": {
+                                    "ReadRequirement": "Mandatory"
+                                },
+                                "MaxLanes": {
+                                    "ReadRequirement": "Mandatory"
+                                },
+                                "LanesInUse": {
+                                    "ReadRequirement": "Mandatory"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "Drive": {
+            "MinVersion": "1.5.0",
+            "Purpose": "Every implementation must have one or more drive resources",
+            "PropertyRequirements": {
+                "ReadRequirement": "Mandatory",
+                "@odata.context": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "@odata.id": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "@odata.etag": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "@odata.type": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "Id":{
+                    "ReadRequirement": "Mandatory"
+                },
+                "Name": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "Status": {
+                    "PropertyRequirements": {
+                        "State": {
+                            "ReadRequirement": "Mandatory",
+                            "Comparison": "AnyOf",
+                            "Values": ["Enabled", "Disabled", "StandbyOffline", "StandbySpare", "UnavailableOffline", "Updating"]
+                        },
+                        "Health": {
+                            "ReadRequirement": "Mandatory",
+                            "Purpose": "Health of the drive"
+                        }
+                    }
+                },
+                "IndicatorLED": {
+                    "ReadRequirement": "Mandatory",
+                    "Comparison": "AnyOf",
+                    "Values": ["Lit", "Off"]
+                },
+                "Model": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "Revision": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "CapacityBytes": {
+                    "ReadRequirement": "Mandatory",
+                    "Purpose": "Actual drive capacity"
+                },
+                "BlockSizeBytes": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "FailurePredicted": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "Protocol": {
+                    "ReadRequirement": "Mandatory",
+                    "Comparison": "AnyOf",
+                    "Values": ["SAS", "SATA"]
+                },
+                "MediaType": {
+                    "ReadRequirement": "Mandatory",
+                    "Comparison": "AnyOf",
+                    "Values": ["HDD", "SSD", "SMR"]
+                },
+                "Manufacturer": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "SerialNumber": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "StatusIndicator": {
+                    "ReadRequirement": "Mandatory",
+                    "Purpose": "SES status of drive",
+                    "Comparison": "AnyOf",
+                    "Values": ["OK", "Fail", "Rebuild", "PredictiveFailureAnalysis", "Hotspare"]
+                },
+                "Identifiers": {
+                    "ReadRequirement": "Mandatory",
+                    "MinCount": 1,
+                    "PropertyRequirements": {
+                        "DurableName": {
+                            "ReadRequirement": "Mandatory"
+                        },
+                        "DurableNameFormat": {
+                            "ReadRequirement": "Mandatory",
+                            "Comparison": "Equal",
+                            "Values": ["NAA"]
+                        }
+                    }
+                },
+                "PhysicalLocation": {
+                    "ReadRequirement": "Mandatory",
+                    "PropertyRequirements": {
+                        "PartLocation": {
+                            "ReadRequirement": "Mandatory",
+                            "PropertyRequirements": {
+                                "LocationOrdinalValue": {
+                                    "ReadRequirement": "Mandatory"
+                                },
+                                "LocationType": {
+                                    "ReadRequirement": "Mandatory",
+                                    "Comparison": "Equal",
+                                    "Values": ["Bay"]
+                                },
+                                "ServiceLabel": {
+                                    "ReadRequirement": "Mandatory"
+                                }
+                            }
+                        }
+                    }
+                },
+                "HotspareType": {
+                    "ReadRequirement": "Mandatory",
+                    "Comparison": "AnyOf",
+                    "Values": ["None", "Dedicated"]
+                },
+                "RotationSpeedRPM": {
+                    "ReadRequirement": "Conditional",
+                    "ConditionalRequirements": [{
+                        "Purpose": "Applicable only if MediaType is HDD or SMR",
+                        "CompareProperty": "MediaType",
+                        "CompareType": "AnyOf",
+                        "CompareValues": ["HDD", "SMR"],
+                        "ReadRequirement": "Mandatory"
+                    }]
+                },
+                "CapableSpeedGbs": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "NegotiatedSpeedGbs": {
+                    "ReadRequirement": "Mandatory"
+                },
+                "PredictedMediaLifeLeftPercent": {
+                    "ReadRequirement": "Conditional",
+                    "ConditionalRequirements": [{
+                        "Purpose": "Applicable only if MediaType is SSD",
+                        "CompareProperty": "MediaType",
+                        "CompareType": "AnyOf",
+                        "CompareValues": ["SSD"],
+                        "ReadRequirement": "Mandatory"
+                    }]
+                },
+                "Operations": {
+                    "ReadRequirement": "Mandatory",
+                    "MinCount": 0,
+                    "PropertyRequirements": {
+                        "OperationName": {
+                            "ReadRequirement": "Mandatory",
+                            "Comparison": "AnyOf",
+                            "Values": ["Rebuilding", "Erasing", "Sanitizing"]
+                        }
+                    }
+                },
+                "Links": {
+                    "ReadRequirement": "Mandatory",
+                    "PropertyRequirements": {
+                        "Volumes@odata.count": {
+                            "ReadRequirement": "Mandatory"
+                        },
+                        "Volumes": {
+                            "ReadRequirement": "Mandatory"
+                        }
+                    }
+                },
+                "HotspareReplacementMode": {
+                    "ReadRequirement": "Conditional",
+                    "Comparison": "AnyOf",
+                    "Values": ["Revertible", "NonRevertible"],
+                    "ConditionalRequirements": [{
+                        "Purpose": "Applicable only if the drive is configured as a hot spare",
+                        "CompareProperty": "HotspareType",
+                        "CompareType": "AnyOf",
+                        "CompareValues": ["Dedicated"],
+                        "ReadRequirement": "Mandatory"
+                    }]
+                }
+            }
+        }
+    }
+}
