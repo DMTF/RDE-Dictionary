@@ -893,9 +893,9 @@ def generate_byte_array(dictionary, version, is_truncated):
     else:
         binary_data.append(0x00)
 
-    binary_data.extend(version.to_bytes(4, 'little', signed=False))  # SchemaVersion
-
     binary_data.extend(len(dictionary).to_bytes(2, 'little', signed=False))  # EntryCount
+
+    binary_data.extend(version.to_bytes(4, 'little', signed=False))  # SchemaVersion
 
     binary_data.extend(dictionary_binary_size(dictionary).to_bytes(4, 'little', signed=False))  # DictionarySize
 
@@ -977,9 +977,9 @@ def print_binary_dictionary(byte_array):
     # print header
     print('VersionTag: ', stream.get_int(1))
     print('DictionaryFlags: ', stream.get_int(1))
-    print('SchemaVersion: ', hex(stream.get_int(4)))
     total_entries = stream.get_int(2)
     print('EntryCount: ', total_entries)
+    print('SchemaVersion: ', hex(stream.get_int(4)))
     print('DictionarySize: ', stream.get_int(4))
 
     # print each entry
