@@ -1163,7 +1163,6 @@ if __name__ == '__main__':
             )
 
             ver = 0xF1F0F000  # TODO: fix version for annotation dictionary (maybe add cmd line param)
-            entity = 'Annotation'
 
         dictionary_byte_array = generate_byte_array(dictionary, ver, False)
         print_dictionary_summary(dictionary, dictionary_byte_array)
