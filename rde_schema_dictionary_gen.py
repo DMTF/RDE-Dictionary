@@ -20,13 +20,11 @@ from tabulate import tabulate
 import urllib.request
 import sys
 from collections import Counter
+from collections import namedtuple
 from copy import deepcopy
 import binascii
 import os.path
 
-
-# dict to build a list of namespaces that will be used to build the d
-includeNamespaces = {}
 
 # OData types
 ODATA_ENUM_TYPE = '{http://docs.oasis-open.org/odata/ns/edm}EnumType'
@@ -61,6 +59,9 @@ ENTITY_REPO_ENTRY_FLAGS = 3
 ENTITY_REPO_ENTRY_REFERENCE = 4
 ENTITY_REPO_ENTRY_AUTO_EXPAND = 5
 
+# Global variable to set verbosity.
+includeNamespaces = {} # Dict to build a list of namespaces that will be used to build the dictionary
+verbose = False
 
 def get_base_properties(entity_type):
     """
@@ -130,6 +131,8 @@ def get_property_permissions(property):
 
 
 def get_properties(some_type, path='descendant-or-self::edm:Property | edm:NavigationProperty'):
+    global verbose
+
     properties = []
     property_elements = some_type.xpath(path, namespaces=ODATA_ALL_NAMESPACES)
     for property_element in property_elements:
@@ -185,7 +188,7 @@ def get_properties(some_type, path='descendant-or-self::edm:Property | edm:Navig
                     primitive_type = get_primitive_type(complex_type.get('UnderlyingType'))
                     properties.append([property_name, primitive_type, property_flags, ''])
                 else:
-                    if args.verbose:
+                    if verbose:
                         print(complex_type.tag)
                     assert False
 
@@ -295,33 +298,36 @@ def add_actions(doc, entity_repo):
         )
 
 
-def find_csdl_source(filename):
-    for csdl_dir in args.csdlSchemaDirectories:
+def find_csdl_source(csdl_schema_dirs, filename):
+    for csdl_dir in csdl_schema_dirs:
         if os.path.isfile(csdl_dir + '/' + filename):
-            return csdl_dir + '/' + filename
+            return os.path.join(csdl_dir, filename)
     return ''
 
 
-def find_json_schema_source(filename):
-    for json_schema_dir in args.jsonSchemaDirectories:
+def find_json_schema_source(json_schema_dirs, filename):
+    for json_schema_dir in json_schema_dirs:
         if os.path.isfile(json_schema_dir + '/' + filename):
-            return json_schema_dir + '/' + filename
+            return os.path.join(json_schema_dir, filename)
     return ''
 
 
-def add_namespaces(source, doc_list):
+def add_namespaces(csdl_schema_dirs, source_type, source, doc_list):
+    global includeNamespaces
+    global verbose
+
     doc_name = source
     schema_string = ''
-    if args.source == 'remote':
+    if source_type == 'remote':
         doc_name = extract_doc_name_from_url(source)
 
     # first load the CSDL file as a string
     if doc_name not in doc_list:
-        if args.source == 'remote':
+        if source_type == 'remote':
             # ignore odata references
             if source.find('http://docs.oasis') == -1:
                 try:
-                    if args.verbose:
+                    if verbose:
                         print('Opening URL', source)
                     schema_string = urllib.request.urlopen(source).read()
                 except:
@@ -343,19 +349,21 @@ def add_namespaces(source, doc_list):
 
         # bring in all dependent documents and their corresponding namespaces
         for ref in doc.xpath('descendant-or-self::edmx:Reference', namespaces=ODATA_ALL_NAMESPACES):
-            if args.source == 'remote':
+            if source_type == 'remote':
                 dependent_source = ref.get('Uri')
             else:
-                dependent_source = find_csdl_source(extract_doc_name_from_url(ref.get('Uri')))
+                dependent_source = find_csdl_source(csdl_schema_dirs, extract_doc_name_from_url(ref.get('Uri')))
 
                 if os.path.exists(dependent_source) is False:
                     continue
-                if args.verbose:
+                if verbose:
                     print(dependent_source)
-            add_namespaces(dependent_source, doc_list)
+            add_namespaces(csdl_schema_dirs, source_type, dependent_source, doc_list)
 
 
 def get_latest_version(entity):
+    global includeNamespaces
+
     # search the namespaces for all 'entity.vMajor_Minor_Errata'
     result = [key for key, value in includeNamespaces.items() if key.startswith(entity.split('.')[1]+'.')]
 
@@ -396,27 +404,29 @@ def find_enum(key, dictionary):
     return None
 
 
-def fix_enums(entity_repo, key):
+def fix_enums(json_schema_dirs, entity_repo, key):
+    global verbose
+
     if entity_repo[key][ENTITY_REPO_TUPLE_TYPE_INDEX] == 'Enum':
         # build a list of json schema files that need to be scanned for the enum in question
         [base_filename, enum_name] = key.split('.')
-        if args.verbose:
+        if verbose:
             print("Need to look at json schema to fix enums for", key, base_filename)
         enum_values = []
-        for json_schema_dir in args.jsonSchemaDirectories:
+        for json_schema_dir in json_schema_dirs:
             for file in os.listdir(json_schema_dir):
                 if file.startswith(base_filename + '.'):
                     json_schema = json.load(open(json_schema_dir + '/' + file))
                     # search json schema for enum
 
-                    if args.verbose:
+                    if verbose:
                         print("Looking for", enum_name, "in", json_schema_dir + '/' + file)
                     json_enum = find_enum(enum_name, json_schema)
                     if json_enum is not None:
-                        if args.verbose:
+                        if verbose:
                             print(json_enum["enum"])
                         enum_values = enum_values + list((Counter(json_enum["enum"]) - Counter(enum_values)).elements())
-                        if args.verbose:
+                        if verbose:
                             print(enum_values)
 
         if len(enum_values):
@@ -425,27 +435,30 @@ def fix_enums(entity_repo, key):
             entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].extend([[enum] for enum in enum_values])
 
 
-def add_all_entity_and_complex_types(doc_list, entity_repo):
+def add_all_entity_and_complex_types(json_schema_dirs, source_type, doc_list, entity_repo):
     for key in doc_list:
         add_entity_and_complex_types(doc_list[key], entity_repo)
         add_actions(doc_list[key], entity_repo)
         add_annotation_terms(doc_list[key], entity_repo)
 
     # add special ones for AutoExpandRefs
-    #entity_repo['AutoExpandRef'] = ('Set', [['@odata.id', 'String', '']])
+    # entity_repo['AutoExpandRef'] = ('Set', [['@odata.id', 'String', '']])
     # entity_repo['AutoExpandRef'] = ('Set', [['', 'Set', '']])
 
     # second pass, add seq numbers
     for key in entity_repo:
         # TODO: Fix enums (works only for local mode currently)
-        if args.source == 'local' and entity_repo[key][ENTITY_REPO_TUPLE_TYPE_INDEX] == 'Enum':
-            fix_enums(entity_repo, key)
+        if source_type == 'local' and entity_repo[key][ENTITY_REPO_TUPLE_TYPE_INDEX] == 'Enum':
+            fix_enums(json_schema_dirs, entity_repo, key)
 
         for seq, item in enumerate(entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
             item.insert(0, seq)
 
 
 def get_base_type(child):
+    global includeNamespaces
+    global verbose
+
     if child.get('BaseType') is not None:
         m = re.compile('(.*)\.(\w*)').match(child.get('BaseType'))
         base_namespace = m.group(1)
@@ -456,7 +469,8 @@ def get_base_type(child):
                                                                                                 base_entity_name),
                 namespaces=ODATA_ALL_NAMESPACES)[0]
         except:
-            print(base_namespace, base_entity_name)
+            if verbose:
+                print(base_namespace, base_entity_name)
             sys.exit()
 
 def is_parent_abstract(entity_type):
@@ -469,6 +483,8 @@ def is_abstract(entity_type):
 
 
 def find_element_from_type(type):
+    global includeNamespaces
+
     m = re.compile('(.*)\.(\w*)').match(type)
     namespace = m.group(1)
     entity_name = m.group(2)
@@ -488,7 +504,7 @@ def add_dictionary_row(dictionary, index, seq_num, format, format_flags, field_s
     dictionary.append([index, seq_num, format, format_flags, field_string, child_count, offset])
 
 
-def add_dictionary_entries(schema_dictionary, entity_repo, entity, is_parent_array):
+def add_dictionary_entries(schema_dictionary, entity_repo, entity, entity_offset_map, is_parent_array):
     if entity in entity_repo:
         entity_type = entity_repo[entity][ENTITY_REPO_TUPLE_TYPE_INDEX]
         start = len(schema_dictionary)
@@ -553,7 +569,7 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity, is_parent_arr
     return 0, 0
 
 
-def generate_json_dictionary(output_stream, dictionary, dictionary_byte_array, entity, ver):
+def generate_json_dictionary(dictionary, dictionary_byte_array, entity, ver):
     summary = {}
 
     summary['schema_name'] = entity
@@ -566,7 +582,7 @@ def generate_json_dictionary(output_stream, dictionary, dictionary_byte_array, e
     summary['schema_dictionary_bytes'] = dictionary_byte_array
     assert(len(summary['schema_dictionary_bytes']) == summary['schema_dictionary_length_bytes'])
 
-    output_stream.write(json.dumps(summary))
+    return (json.dumps(summary))
 
 
 def print_dictionary_summary(dictionary, dictionary_byte_array):
@@ -581,16 +597,7 @@ def print_dictionary_summary(dictionary, dictionary_byte_array):
     print('Signature:', hex(binascii.crc32(bytes(dictionary_byte_array))))
 
 
-entity_offset_map = {}
-
-
-def find_item_offset_and_size(schema_dictionary, item_to_find):
-    if item_to_find in entity_offset_map:
-        return entity_offset_map[item_to_find][0];
-    return 0
-
-
-def generate_dictionary(dictionary, optimize_duplicate_items=True):
+def generate_dictionary(dictionary, entity_repo, entity_offset_map, optimize_duplicate_items=True):
     can_expand = True
     while can_expand:
         tmp_dictionary = dictionary.copy()
@@ -619,6 +626,7 @@ def generate_dictionary(dictionary, optimize_duplicate_items=True):
 
                     num_entries, offset = add_dictionary_entries(tmp_dictionary, entity_repo,
                                                                  item[DICTIONARY_ENTRY_OFFSET],
+                                                                 entity_offset_map,
                                                                  item[DICTIONARY_ENTRY_FORMAT] == 'Array')
 
                 tmp_dictionary[index][DICTIONARY_ENTRY_OFFSET] = ''
@@ -655,6 +663,8 @@ ANNOTATION_DICTIONARY_RESERVED_ENTRY = 4
 
 
 def add_odata_annotations(annotation_dictionary, odata_annotation_location):
+    global verbose
+
     json_schema = json.load(open(odata_annotation_location))
     offset = len(annotation_dictionary)
     count = 0
@@ -672,7 +682,8 @@ def add_odata_annotations(annotation_dictionary, odata_annotation_location):
             # TODO expand object
             bej_format = 'Set'
         else:
-            print('Unknown format')
+            if verbose:
+                print('Unknown format')
 
         add_dictionary_row(annotation_dictionary, offset, offset - 5, bej_format, '', k, 0, '')
         offset = offset + 1
@@ -690,7 +701,7 @@ def fix_annotations_sequence_numbers(annotation_dictionary, annotation_index, st
             (annotation_dictionary[index][DICTIONARY_ENTRY_SEQUENCE_NUMBER] << 2) | stripe_factor
 
 
-def generate_annotation_dictionary():
+def generate_annotation_dictionary(json_schema_dirs, entity_repo, entity_offset_map):
     annotation_dictionary = []
 
     # first 4 entries
@@ -703,11 +714,11 @@ def generate_annotation_dictionary():
     add_dictionary_row(annotation_dictionary, redfish_row_index, 0, "Set", '', "Redfish", 0, 'Redfish')
     add_dictionary_row(annotation_dictionary, 4, 0, "Set", '', "reserved", 0, '')
 
-    odata_annotation_location = find_json_schema_source('odata.v4_0_2.json')
+    odata_annotation_location = find_json_schema_source(json_schema_dirs, 'odata.v4_0_2.json')
     annotation_dictionary[1][DICTIONARY_ENTRY_CHILD_COUNT] = \
         add_odata_annotations(annotation_dictionary, odata_annotation_location)
 
-    annotation_dictionary = generate_dictionary(annotation_dictionary, False)
+    annotation_dictionary = generate_dictionary(annotation_dictionary, entity_repo, entity_offset_map, False)
 
     # In order to present annotations as a flat namespace, sequence numbers for elements from the
     # odata, Message and Redfish schema shall have their two low-order bits set to 00b, 01b and 10b
@@ -1017,6 +1028,143 @@ def print_binary_dictionary(byte_array):
     )
 
 
+# Named tuple to return schema dictionary.
+SchemaDictionary = namedtuple('SchemaDictionary', 'dictionary dictionary_byte_array json_dictionary')
+
+def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
+                               entity, schema_file_name, oem_entities=None,
+                               oem_schema_file_names=None, profile=None, schema_url=None):
+    """ Generate the schema dictionary.
+
+    Args:
+        source_type: Type of schema file. local, annotation or remote.
+        csdl_schema_dirs: List of CSDL schema directories.
+        json_schema_dirs: List of JSON schema directories.
+        entity: Schema entity name.
+        schema_file_name: Schema file name.
+        oem_entities: List of oem entities (default None).
+        oem_schema_file_names: List of OEM schema file names (default None).
+        profile: Schema profile (default None)
+        schema_url: Schema URL. Used when source_type is remote (default None).
+
+    Return:
+        SchemaDictionary: Named tuple which has the following fields:
+                          dictionary - The schema dictionary.
+                          dictionary_byte_array - The schema dictionary in byte array.
+                          json_dictionary - Schema dictionary in JSON format.
+    """
+    global includeNamespaces
+    global verbose
+
+    # Initialize the global variables.
+    doc_list = {}
+    source = ''
+    oemSources = []
+    oemEntityType = ''
+    entity_repo = {}
+    entity_offset_map = {}
+    includeNamespaces = {}
+
+    # Validate source type.
+    if source_type not in ['local', 'annotation', 'remote']:
+        if verbose:
+            print('Error, invalid source_type: {0}'.format(source_type))
+        return (SchemaDictionary(dictionary=None,
+                                 dictionary_byte_array=None,
+                                 json_dictionary=None))
+
+    # Set the source variable. If source_type is remote set source to schema_url.
+    if source_type == 'remote':
+        source = schema_url
+    else:
+        # compute source starting with the first csdl directory. The first one wins
+        source = schema_file_name
+        for csdl_dir in csdl_schema_dirs:
+            if os.path.isfile(os.path.join(csdl_dir, schema_file_name)):
+                source = os.path.join(csdl_dir, schema_file_name)
+                break
+
+    # Set oem sources and entity repo for oem schema file names.
+    if oem_schema_file_names:
+        for oem_schema_file in oem_schema_file_names:
+            for csdl_dir in csdl_schema_dirs:
+                if os.path.isfile(os.path.join(csdl_dir, oem_schema_file)):
+                    oemSources.append(os.path.join(csdl_dir, oem_schema_file))
+
+        oemEntityType = entity + '.Oem'
+        # create a special entity for OEM and set the major entity's oem section to it
+        entity_repo[oemEntityType] = ('Set', [])
+        for oemEntityPair in oem_entities:
+            oemName, oemEntity = oemEntityPair.split('=')
+            entity_repo[oemEntityType][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].append(
+               [oemName, 'Set', '', oemEntity])
+
+    # Add namespaces.
+    add_namespaces(csdl_schema_dirs, source_type, source, doc_list)
+    for oemSource in oemSources:
+        add_namespaces(csdl_schema_dirs, source_type, oemSource, doc_list)
+
+    if verbose:
+        pprint.PrettyPrinter(indent=3).pprint(doc_list)
+
+    add_all_entity_and_complex_types(json_schema_dirs, source_type, doc_list, entity_repo)
+    if verbose:
+        pprint.PrettyPrinter(indent=3).pprint(entity_repo)
+
+    # set the entity oem entry to the special OEM entity type
+    if source_type == 'local' and oem_schema_file_names:
+        for property in entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]:
+            if property[PROPERTY_FIELD_STRING] == 'Oem':
+                property[PROPERTY_OFFSET] = oemEntityType
+
+    # search for entity and build dictionary
+    if entity in entity_repo:
+        ver = ''
+        dictionary = []
+        if source_type == 'local':
+            # truncate the entity_repo first if a profile is specified
+            is_truncated = False
+            if profile:
+                with open(profile) as file:
+                    json_profile = json.load(file)
+                # Fix up the profile
+                profile_requirements = process_profile(json_profile, entity)
+                if profile_requirements:
+                    truncate_entity_repo(entity_repo, entity, profile_requirements, is_truncated)
+                else:
+                    if verbose:
+                        print('Error parsing profile')
+                    sys.exit(1)
+
+            num_entries, offset = add_dictionary_entries(dictionary, entity_repo, entity,
+                                                         entity_offset_map, is_parent_array=False)
+            dictionary = generate_dictionary(dictionary, entity_repo, entity_offset_map)
+            ver = get_latest_version_as_ver32(entity)
+
+        if source_type == 'annotation':
+            dictionary = generate_annotation_dictionary(json_schema_dirs, entity_repo, entity_offset_map)
+            ver = 0xF1F0F000  # TODO: fix version for annotation dictionary (maybe add cmd line param)
+
+        # Generate dictionary_byte_array.
+        dictionary_byte_array = generate_byte_array(dictionary, ver, False)
+
+        # Generate JSON dictionary.
+        json_dictionary = generate_json_dictionary(dictionary, dictionary_byte_array, entity, ver)
+
+        # Return the named tuple.
+        return (SchemaDictionary(dictionary=dictionary,
+                                 dictionary_byte_array=dictionary_byte_array,
+                                 json_dictionary=json_dictionary))
+
+    # Reached here means something went wrong. Return an empty named tuple.
+    else:
+        if verbose:
+            print('Error, cannot find entity:', entity)
+        return (SchemaDictionary(dictionary=None,
+                                 dictionary_byte_array=None,
+                                 json_dictionary=None))
+
+
 if __name__ == '__main__':
     # rde_schema_dictionary parse --schemaDir=directory --schemaFilename=filename
     parser = argparse.ArgumentParser()
@@ -1057,6 +1205,9 @@ if __name__ == '__main__':
         parser.print_help(sys.stderr)
         sys.exit(1)
 
+    # Set the verbose flag.
+    verbose = args.verbose
+
     # view an existing binary dictionary
     if args.source == 'view':
         # load the binary dictionary file
@@ -1065,114 +1216,36 @@ if __name__ == '__main__':
         print_binary_dictionary(list(contents))
         sys.exit()
 
-    # bring in all dependent documents and their corresponding namespaces
-    doc_list = {}
-    source = ''
-    entity = ''
-    oemSources = []
-    entity_repo = {}
-
+    # Generate the schema dictionary.
     if args.source == 'local':
-        entity = args.entity
-
-        # compute source starting with the first csdl directory. The first one wins
-        source = args.schemaFilename
-        for csdl_dir in args.csdlSchemaDirectories:
-            if os.path.isfile(csdl_dir + '/' + args.schemaFilename):
-                source = csdl_dir + '/' + args.schemaFilename
-                break
-
-        if args.oemSchemaFilenames:
-            for schema_filename in args.oemSchemaFilenames:
-                for csdl_dir in args.csdlSchemaDirectories:
-                    if os.path.isfile(csdl_dir + '/' + schema_filename):
-                        oemSources.append(csdl_dir + '/' + schema_filename)
-
-        if args.oemSchemaFilenames:
-            oemEntityType = entity + '.Oem'
-            # create a special entity for OEM and set the major entity's oem section to it
-            entity_repo[oemEntityType] = ('Set', [])
-            for oemEntityPair in args.oemEntities:
-                oemName, oemEntity = oemEntityPair.split('=')
-                entity_repo[oemEntityType][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].append(
-                    [oemName, 'Set', '', oemEntity])
+        schema_dictionary = generate_schema_dictionary(args.source, args.csdlSchemaDirectories,
+                                                       args.jsonSchemaDirectories, args.entity,
+                                                       args.schemaFilename, args.oemEntities,
+                                                       args.oemSchemaFilenames, args.profile)
     elif args.source == 'remote':
-        entity = args.entity
-        source = args.schemaURL
+        schema_dictionary = generate_schema_dictionary(args.source, None, None, args.entity,
+                                                       None, None, None, None, args.schemaURL)
     elif args.source == 'annotation':
-        # Just choose a dummy complex type to start the annotation dictionary generation process
-        entity = 'RedfishExtensions.PropertyPattern'
-        for csdl_dir in args.csdlSchemaDirectories:
-            if os.path.isfile(csdl_dir + '/' + 'RedfishExtensions_v1.xml'):
-                source = csdl_dir + '/' + 'RedfishExtensions_v1.xml'
-                break
+        # Just choose a dummy complex entity type to start the annotation dictionary generation process.
+        schema_dictionary = generate_schema_dictionary(args.source, args.csdlSchemaDirectories,
+                                                       args.jsonSchemaDirectories, 'RedfishExtensions.PropertyPattern',
+                                                       'RedfishExtensions_v1.xml')
 
-    add_namespaces(source, doc_list)
-    for oemSource in oemSources:
-        add_namespaces(oemSource, doc_list)
+    # Print table data.
+    if schema_dictionary.dictionary:
+        print_table_data(
+                      [["Row", "Sequence#", "Format", "Flags", "Field String", "Child Count", "Offset"]]
+                      +
+                      schema_dictionary.dictionary)
 
-    if args.verbose:
-        pprint.PrettyPrinter(indent=3).pprint(doc_list)
-
-    add_all_entity_and_complex_types(doc_list, entity_repo)
-    if args.verbose:
-        pprint.PrettyPrinter(indent=3).pprint(entity_repo)
-
-    # set the entity oem entry to the special OEM entity type
-    if args.source == 'local' and args.oemSchemaFilenames:
-        for property in entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]:
-            if property[PROPERTY_FIELD_STRING] == 'Oem':
-                property[PROPERTY_OFFSET] = oemEntityType
-
-    # search for entity and build dictionary
-    if entity in entity_repo:
-        ver = ''
-        dictionary = []
-        if args.source == 'local':
-            # truncate the entity_repo first if a profile is specified
-            is_truncated = False
-            if args.profile:
-                with open(args.profile) as file:
-                    json_profile = json.load(file)
-                # Fix up the profile
-                profile_requirements = process_profile(json_profile, entity)
-                if profile_requirements:
-                    truncate_entity_repo(entity_repo, entity, profile_requirements, is_truncated)
-                else:
-                    print('Error parsing profile')
-                    sys.exit(1)
-
-            num_entries, offset = add_dictionary_entries(dictionary, entity_repo, entity, is_parent_array=False)
-            dictionary = generate_dictionary(dictionary)
-
-            print_table_data(
-                [["Row", "Sequence#", "Format", "Flags", "Field String", "Child Count", "Offset"]]
-                +
-                dictionary
-            )
-
-            ver = get_latest_version_as_ver32(entity)
-
-        if args.source == 'annotation':
-            entity_offset_map = {}
-            dictionary = generate_annotation_dictionary()
-            print_table_data(
-                [["Row", "Sequence#", "Format", "Flags", "Field String", "Child Count", "Offset"]]
-                +
-                dictionary
-            )
-
-            ver = 0xF1F0F000  # TODO: fix version for annotation dictionary (maybe add cmd line param)
-
-        dictionary_byte_array = generate_byte_array(dictionary, ver, False)
-        print_dictionary_summary(dictionary, dictionary_byte_array)
+        # Print dictionary summary.
+        print_dictionary_summary(schema_dictionary.dictionary, schema_dictionary.dictionary_byte_array)
 
         # Generate binary dictionary file
         if args.outputFile:
-            args.outputFile.write(bytes(dictionary_byte_array))
+            args.outputFile.write(bytes(schema_dictionary.dictionary_byte_array))
 
         if args.outputJsonDictionaryFile:
-            generate_json_dictionary(args.outputJsonDictionaryFile, dictionary, dictionary_byte_array, entity, ver)
-
+            args.outputJsonDictionaryFile.write(schema_dictionary.json_dictionary)
     else:
-        print('Error, cannot find entity:', entity)
+        print('Error, dictionary could not be generated')
