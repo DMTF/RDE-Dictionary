@@ -62,6 +62,7 @@ ENTITY_REPO_ENTRY_AUTO_EXPAND = 5
 # Global variable to set verbosity.
 includeNamespaces = {} # Dict to build a list of namespaces that will be used to build the dictionary
 verbose = False
+silent = False
 
 def get_base_properties(entity_type):
     """
@@ -1169,6 +1170,7 @@ if __name__ == '__main__':
     # rde_schema_dictionary parse --schemaDir=directory --schemaFilename=filename
     parser = argparse.ArgumentParser()
     parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
+    parser.add_argument("--silent", help="no output prints unless errors", action="store_true")
     subparsers = parser.add_subparsers(dest='source')
 
     # TODO: Fix remote for json fixups
@@ -1207,6 +1209,10 @@ if __name__ == '__main__':
 
     # Set the verbose flag.
     verbose = args.verbose
+    silent = args.silent
+    if verbose and silent:  # override silent if verbose is set
+        verbose = True
+        silent = False
 
     # view an existing binary dictionary
     if args.source == 'view':
@@ -1233,13 +1239,15 @@ if __name__ == '__main__':
 
     # Print table data.
     if schema_dictionary.dictionary:
-        print_table_data(
-                      [["Row", "Sequence#", "Format", "Flags", "Field String", "Child Count", "Offset"]]
-                      +
-                      schema_dictionary.dictionary)
+        if not silent:
+            print_table_data(
+                          [["Row", "Sequence#", "Format", "Flags", "Field String", "Child Count", "Offset"]]
+                          +
+                          schema_dictionary.dictionary)
 
         # Print dictionary summary.
-        print_dictionary_summary(schema_dictionary.dictionary, schema_dictionary.dictionary_byte_array)
+        if not silent:
+            print_dictionary_summary(schema_dictionary.dictionary, schema_dictionary.dictionary_byte_array)
 
         # Generate binary dictionary file
         if args.outputFile:
