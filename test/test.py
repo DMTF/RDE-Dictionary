@@ -2,6 +2,11 @@ import json
 import os
 import re
 from collections import namedtuple
+import importlib
+import sys
+import argparse
+
+rde_lib_name = "rde_schema_dictionary_gen"
 
 TestSpecification = namedtuple('TestSpecification', 'csdl_directories '
                                                     'schema_filename '
@@ -59,54 +64,101 @@ MAJOR_SCHEMA_DICTIONARY_LIST = [
                                 ]
 
 if __name__ == '__main__':
-    # go thru every csdl and attempt creating a dictionary
-    skip_list = ['AttributeRegistry_v1.xml']  # TODO: find and fix why these are failing
-    schema_test_dir = 'test/schema'
-    for filename in os.listdir(schema_test_dir + '/metadata'):
-        if filename not in skip_list:
-            # strip out the _v1.xml
-            m = re.compile('(.*)_v1.xml').match(filename)
-            if m:
-                entity = m.group(1) + '.' + m.group(1)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--test_bej", help="test only BEJ", action="store_true")
 
-            dict_cmd = 'python rde_schema_dictionary_gen.py --silent local ' \
-                       '--csdlSchemaDirectories ' + schema_test_dir + '/metadata ' \
-                       '--jsonSchemaDirectories ' + schema_test_dir + '/json-schema ' \
-                       '--schemaFilename ' + filename + \
-                       ' --entity ' + entity + \
-                       ' --outputFile ' + 'tmp_dict.bin'
-            print(dict_cmd)
-            error_code = os.system(dict_cmd)
-            if error_code != 0:
-                exit(error_code)
+    args = parser.parse_args()
+
+    # Import the RDE dictionary builder script.
+    try:
+        sys.path.append('./')
+        rde_dictionary_module = importlib.import_module(rde_lib_name)
+    except Exception as ex:
+        print("Error: Failed to import RDE dictionary builder library:", rde_lib_name)
+        print("Error: Exception type: {0}, message: {1}".format(ex.__class__.__name__, str(ex)))
+        sys.exit(1)
+
+    schema_test_dir = 'test/schema'
+    if not args.test_bej:
+        # go thru every csdl and attempt creating a dictionary
+        skip_list = ['AttributeRegistry_v1.xml']  # TODO: find and fix why these are failing
+        for filename in os.listdir(schema_test_dir + '/metadata'):
+            if filename not in skip_list:
+                # strip out the _v1.xml
+                m = re.compile('(.*)_v1.xml').match(filename)
+                if m:
+                    entity = m.group(1) + '.' + m.group(1)
+
+                try:
+                    schema_dictionary = rde_dictionary_module.generate_schema_dictionary(
+                        'local',
+                        [schema_test_dir + '/metadata'],
+                        [schema_test_dir + '/json-schema'],
+                        entity,
+                        filename
+                    )
+
+                    if schema_dictionary and schema_dictionary.dictionary and schema_dictionary.json_dictionary:
+                        print(filename, 'Entries:', len(schema_dictionary.dictionary), 'Size:', len(schema_dictionary.dictionary_byte_array) )
+                    else:
+                        print(filename, "Missing entities")
+
+                except Exception as ex:
+                    print("Error: Could not generate JSON schema dictionary for schema:", filename)
+                    print("Error: Exception type: {0}, message: {1}".format(ex.__class__.__name__, str(ex)))
+                    exit(1)
+
 
     # Generate the annotation dictionary
     print('Generating annotation dictionary...')
-    error_code = os.system('python rde_schema_dictionary_gen.py annotation '
-                           '--csdlSchemaDirectories test/schema/metadata '
-                           '--jsonSchemaDirectories test/schema/json-schema '
-                           '--outputFile annotation.bin')
-    if error_code != 0:
-        exit(error_code)
+    try:
+        annotation_dictionary = rde_dictionary_module.generate_schema_dictionary(
+            'annotation',
+            [schema_test_dir + '/metadata'],
+            [schema_test_dir + '/json-schema'],
+            'RedfishExtensions.PropertyPattern',
+            'RedfishExtensions_v1.xml'
+        )
+
+        if annotation_dictionary and annotation_dictionary.dictionary \
+                and annotation_dictionary.dictionary_byte_array and annotation_dictionary.json_dictionary:
+            print('Entries:', len(annotation_dictionary.dictionary), 'Size:',
+                  len(annotation_dictionary.dictionary_byte_array))
+            with open('annotation.bin', 'wb') as annotaton_bin:
+                annotaton_bin.write(bytearray(annotation_dictionary.dictionary_byte_array))
+
+    except Exception as ex:
+        print("Error: Could not generate JSON schema dictionary for schema annotation")
+        print("Error: Exception type: {0}, message: {1}".format(ex.__class__.__name__, str(ex)))
+        exit(1)
+
 
     # Generate the major schema dictionaries
     for major_schema in MAJOR_SCHEMA_DICTIONARY_LIST:
-        dict_cmd = 'python rde_schema_dictionary_gen.py local ' \
-                   '--csdlSchemaDirectories ' + major_schema.csdl_directories + \
-                   ' --jsonSchemaDirectories test/schema/json-schema ' \
-                   '--schemaFilename ' + major_schema.schema_filename + \
-                   ' --entity ' + major_schema.entity + \
-                   (' --oemSchemaFilenames ' if (major_schema.oem_schema_filenames is not '') else '') + \
-                   major_schema.oem_schema_filenames + \
-                   (' --oemEntities ' if (major_schema.oem_entities is not '') else '') + \
-                   major_schema.oem_entities + \
-                   (' --profile ' if (major_schema.profile is not '') else '') + \
-                   major_schema.profile + \
-                   ' --outputFile ' + major_schema.dictionary_filename
-        print(dict_cmd)
-        error_code = os.system(dict_cmd)
-        if error_code != 0:
-            exit(error_code)
+
+        try:
+            schema_dictionary = rde_dictionary_module.generate_schema_dictionary(
+                'local',
+                major_schema.csdl_directories.split(),
+                ['test/schema/json-schema'],
+                major_schema.entity,
+                major_schema.schema_filename,
+                major_schema.oem_entities.split(),
+                major_schema.oem_schema_filenames.split(),
+                major_schema.profile
+            )
+
+            if schema_dictionary and schema_dictionary.dictionary and schema_dictionary.json_dictionary:
+                print('Entries:', len(schema_dictionary.dictionary), 'Size:',
+                      len(schema_dictionary.dictionary_byte_array))
+                with open(major_schema.dictionary_filename, 'wb') as dictionary_bin:
+                    dictionary_bin.write(bytearray(schema_dictionary.dictionary_byte_array))
+                rde_dictionary_module.print_binary_dictionary(schema_dictionary.dictionary_byte_array)
+
+        except Exception as ex:
+            print("Error: Could not generate JSON schema dictionary for schema:", major_schema.schema_filename)
+            print("Error: Exception type: {0}, message: {1}".format(ex.__class__.__name__, str(ex)))
+            exit(1)
 
         # Run the encode/decode
         encode_cmd = 'python pldm_bej_encoder_decoder.py encode '\
@@ -133,6 +185,12 @@ if __name__ == '__main__':
         print(json.dumps(json.loads(decode_file), indent=3))
         assert(json.loads(decode_file) == json.load(open(major_schema.input_encode_filename)))
 
-        # TODO: cleanup
+        # cleanup
+        os.remove('pdr.txt')
+        os.remove(major_schema.output_encoded_filename)
+        os.remove(major_schema.dictionary_filename)
+        
+    # cleanup
+    os.remove('annotation.bin')
 
     exit(code=0)

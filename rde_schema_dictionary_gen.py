@@ -1019,11 +1019,12 @@ def print_binary_dictionary(byte_array):
         if name_length > 0:
             name = "".join(map(chr, byte_array[name_offset:name_offset+name_length]))
 
-        table.append([str(current_entry)+'('+str(current_offset)+')', sequence, format_str, format_flags, name, child_count, str(dictionary_offset_from_binary_offset(offset))+'('+str(offset)+')'])
+        table.append([str(current_entry)+'('+str(current_offset)+')', sequence, format_str, format_flags, name,
+                      str(dictionary_offset_from_binary_offset(offset))+'('+str(offset)+')', child_count])
         current_entry += 1
 
     print_table_data(
-        [["Row", "Sequence#", "Format", "Flags", "Field String", "Child Count", "Offset"]]
+        [["Row", "Sequence#", "Format", "Flags", "Field String", "Offset", "Child Count"]]
         +
         table
     )
