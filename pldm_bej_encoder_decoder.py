@@ -101,7 +101,7 @@ def num_bytes_for_unsigned_integer(value):
     return num_bytes
 
 
-def bej_pack_nnint(stream, value, num_bytes):
+def bej_pack_nnint(stream, value):
     """
     The nnint type captures the BEJ encoding of Non-Negative Integers via the following encoding:
     The first byte shall consist of metadata for the number of bytes needed to encode the numeric
@@ -116,35 +116,39 @@ def bej_pack_nnint(stream, value, num_bytes):
         optimal size is used
     Return: -1 if error or no bytes written, >= 0 indicates number of bytes packed
     """
-    num_bytes_for_value = num_bytes_for_unsigned_integer(value)
-    if num_bytes and (num_bytes < num_bytes_for_value):
-        return -1
+    if value < 128:
+        num_bytes_packed = stream.write(value.to_bytes(1, 'little'))
+    else:
+        num_bytes_for_value = num_bytes_for_unsigned_integer(value)
+        num_bytes_for_value_to_pack = num_bytes_for_value | 0x80
 
-    if num_bytes:
-        num_bytes_for_value = num_bytes
-
-    num_bytes_packed = stream.write(num_bytes_for_value.to_bytes(1, 'little'))
-    num_bytes_packed += stream.write(value.to_bytes(num_bytes_for_value, 'little'))
+        num_bytes_packed = stream.write(num_bytes_for_value_to_pack.to_bytes(1, 'little'))
+        num_bytes_packed += stream.write(value.to_bytes(num_bytes_for_value, 'little'))
 
     return num_bytes_packed
 
 
 def bej_unpack_nnint(stream):
+    # read first byte
     # read num bytes
-    num_bytes = int.from_bytes(stream.read(1), 'little')
-    return int.from_bytes(stream.read(num_bytes), 'little')
+    val = int.from_bytes(stream.read(1), 'little')
+    if val & 0x80:
+        num_bytes = val & 0x7F
+        return int.from_bytes(stream.read(num_bytes), 'little')
+    else:
+        return val
 
 
 def bej_pack_sfl(stream, seq_num, format, length):
     # pack seq num as nnint
-    num_bytes = bej_pack_nnint(stream, seq_num, 0)
+    num_bytes = bej_pack_nnint(stream, seq_num)
 
     # pack format
     format = format << 4
     num_bytes += stream.write(format.to_bytes(1, 'little'))
 
     # pack length as nnint
-    num_bytes += bej_pack_nnint(stream, length, 0)
+    num_bytes += bej_pack_nnint(stream, length)
 
     return num_bytes
 
@@ -242,7 +246,7 @@ def bej_unpack_sflv_integer(stream):
 
 def bej_pack_sflv_enum(stream, seq_num, value):
     num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_ENUM, 1)
-    num_bytes_packed += bej_pack_nnint(stream, value, 0)
+    num_bytes_packed += bej_pack_nnint(stream, value)
 
     return num_bytes_packed
 
@@ -256,7 +260,7 @@ def bej_unpack_sflv_enum(stream):
 
 def bej_pack_sflv_resource_link(stream, seq_num, pdr):
     num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_RESOURCE_LINK, num_bytes_for_unsigned_integer(pdr)+1)
-    num_bytes_packed += bej_pack_nnint(stream, pdr, 0)
+    num_bytes_packed += bej_pack_nnint(stream, pdr)
 
     return num_bytes_packed
 
@@ -277,7 +281,7 @@ def bej_pack_set_start(stream, count):
 
     # construct a new stream to start adding set data and pack the count
     tmp_stream = io.BytesIO()
-    bej_pack_nnint(tmp_stream, count, 0)
+    bej_pack_nnint(tmp_stream, count)
 
     return tmp_stream
 
@@ -299,7 +303,7 @@ def bej_pack_array_start(stream, count):
 
     # construct a new stream to start adding array data and pack the count
     tmp_stream = io.BytesIO()
-    bej_pack_nnint(tmp_stream, count, 0)
+    bej_pack_nnint(tmp_stream, count)
 
     return tmp_stream
 
