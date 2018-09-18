@@ -64,6 +64,9 @@ includeNamespaces = {} # Dict to build a list of namespaces that will be used to
 verbose = False
 silent = False
 
+EntityOffsetMapTuple = namedtuple('EntityOffsetMapTuple', 'offset offset_to_array')
+
+
 def get_base_properties(entity_type):
     """
     Constructs a list of base properties that are inherited by entity_type
@@ -74,7 +77,6 @@ def get_base_properties(entity_type):
 
     properties = []
     if entity_type.get('BaseType') is not None:
-        base_type = entity_type.get('BaseType')
         base_entity = get_base_type(entity_type)
         properties = get_properties(base_entity)
         properties = properties + get_base_properties(base_entity)
@@ -510,29 +512,32 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity, entity_offset
         entity_type = entity_repo[entity][ENTITY_REPO_TUPLE_TYPE_INDEX]
         start = len(schema_dictionary)
 
-        if len(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]) == 0 and is_parent_array:
-            if entity_type not in entity_offset_map:
-                add_dictionary_row(schema_dictionary, start, 0, entity_type, '', '', 0, '')
+        # Check to see if dictionary entries for the entity has already been generated and use the cached offsets
+        # if yes.
+        if entity in entity_offset_map:
+            offset = entity_offset_map[entity].offset
+            array_offset = entity_offset_map[entity].offset_to_array
+            if is_parent_array:
+                # If this is the first time we found a usage of this entity in the context of an array, we need to add
+                # a dummy dictionary entry and update the entity_offset_map
+                if array_offset == 0:
+                    add_dictionary_row(schema_dictionary, start, 0, entity_type, '', '',
+                                       len(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]), offset)
+                    entity_offset_map[entity] = EntityOffsetMapTuple(offset, start)
 
-                # store off into the entity offset map to reuse for other entries that use
-                # the same entity type
-                entity_offset_map[entity_type] = (start, 0)
-            else:
-                start = entity_offset_map[entity_type][0]
+                return entity_offset_map[entity].offset_to_array, len(entity_repo[entity][
+                                                                          ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX])
 
-            return 1, start
-            # return 0, 0
+            return offset, len(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX])
 
-        # For a set or enum add a row indicating this is a set or enum
-        child_count = 0
+        # For a set or enum add a row indicating this is a set or enum if used in the context of an array
         offset = start
-        if entity_type == 'Set' or entity_type == 'Enum':
+        if is_parent_array and (entity_type == 'Set' or entity_type == 'Enum'):
             add_dictionary_row(schema_dictionary, start, 0, entity_type, '', '',
                                len(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]), start + 1)
-            child_count = 1
             start = start + 1
 
-        index = 0
+        child_count = 0
         for index, property in enumerate(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
             if entity_type == 'Enum':  # this is an enum
                 add_dictionary_row(schema_dictionary, index + start, property[PROPERTY_SEQ_NUMBER], 'String', '',
@@ -541,33 +546,41 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity, entity_offset
                 add_dictionary_row(schema_dictionary, index + start, property[PROPERTY_SEQ_NUMBER],
                                    property[PROPERTY_TYPE], property[PROPERTY_FLAGS], property[PROPERTY_FIELD_STRING],
                                    0, property[PROPERTY_OFFSET])
+            child_count = child_count + 1
 
-        if child_count == 0:
-            child_count = index + 1
-
-        entity_offset_map[entity] = (offset, child_count)
-
-        return child_count, offset
-    else:
+        # If we are here, then this is a new set of entries added to the dictionary. Let's update the entity_offset_map
+        # to cache the offsets.
         if is_parent_array:
-            #  Add a simple entry
-            start = len(schema_dictionary)
-            simple_type = 'Set'
-            primitive_type = get_primitive_type(entity)
-            if primitive_type != '':
-                simple_type = primitive_type
+            entity_offset_map[entity] = EntityOffsetMapTuple(offset+1, offset)
+        else:
+            entity_offset_map[entity] = EntityOffsetMapTuple(offset, 0)
 
-            if simple_type not in entity_offset_map:
-                add_dictionary_row(schema_dictionary, start, 0, simple_type, '', '', 0, '')
+        return offset, child_count
 
-                # store off into the entity offset map to reuse for other entries that use
-                # the same primitive type
-                entity_offset_map[simple_type] = (start, 0)
-            else:
-                start = entity_offset_map[simple_type][0]
+    # This case is for empty complex types (Set) that don't have any additional definition in the CSDL (e.g. Oem)
+    # but are being used in the context of an array
+    elif is_parent_array:
+        #  Add a simple entry
+        start = len(schema_dictionary)
+        simple_type = 'Set'
+        primitive_type = get_primitive_type(entity)
+        if primitive_type != '':
+            simple_type = primitive_type
 
-            return 1, start
-    return 0, 0
+        if simple_type not in entity_offset_map:
+            add_dictionary_row(schema_dictionary, start, 0, simple_type, '', '', 0, '')
+
+            # store off into the entity offset map to reuse for other entries that use
+            # the same primitive type
+            entity_offset_map[simple_type] = EntityOffsetMapTuple(start, 0)
+        else:
+            start = entity_offset_map[simple_type].offset
+
+        return start, 0
+
+    # This case is for empty complex types (Set) that don't have any additional definition in the CSDL (e.g. Oem)
+    else:
+        return 0, 0
 
 
 def generate_json_dictionary(dictionary, dictionary_byte_array, entity, ver):
@@ -611,37 +624,20 @@ def generate_dictionary(dictionary, entity_repo, entity_offset_map, optimize_dup
                          or item[DICTIONARY_ENTRY_FORMAT] == 'Array'
                          or item[DICTIONARY_ENTRY_FORMAT] == 'Namespace')):
 
-                # optimization: check to see if dictionary already contains an entry for the complex type/enum.
-                # If yes, then just reuse it instead of creating a new set of entries.
-                offset = 0
-                num_entries = 0
-                if optimize_duplicate_items:
-                    if item[DICTIONARY_ENTRY_OFFSET] in entity_offset_map:
-                        offset = entity_offset_map[item[DICTIONARY_ENTRY_OFFSET]][0]
-                        num_entries = entity_offset_map[item[DICTIONARY_ENTRY_OFFSET]][1]
-
-                if offset == 0:
-                    item_type = item[DICTIONARY_ENTRY_OFFSET]
-                    if item_type in entity_repo:
-                        item_type = entity_repo[item[DICTIONARY_ENTRY_OFFSET]][ENTITY_REPO_TUPLE_TYPE_INDEX]
-
-                    num_entries, offset = add_dictionary_entries(tmp_dictionary, entity_repo,
-                                                                 item[DICTIONARY_ENTRY_OFFSET],
-                                                                 entity_offset_map,
-                                                                 item[DICTIONARY_ENTRY_FORMAT] == 'Array')
+                # Add dictionary entries
+                offset, child_count = add_dictionary_entries(tmp_dictionary, entity_repo,
+                                                             item[DICTIONARY_ENTRY_OFFSET],
+                                                             entity_offset_map,
+                                                             item[DICTIONARY_ENTRY_FORMAT] == 'Array')
 
                 tmp_dictionary[index][DICTIONARY_ENTRY_OFFSET] = ''
                 if offset != 0:
-                    # The offset returned in the case of a Set or Enum is a Set or Enum entry pointing to a list of
-                    # children. If the parent is a property that is a Set or Enum, we only need the property entry to
-                    # point to the first child and encode the child count in the parent property entry itself.
+                    tmp_dictionary[index][DICTIONARY_ENTRY_OFFSET] = offset
+                    # Use child_count only if this is a complex type or enum
                     if item[DICTIONARY_ENTRY_FORMAT] == 'Set' or item[DICTIONARY_ENTRY_FORMAT] == 'Enum':
-                        tmp_dictionary[index][DICTIONARY_ENTRY_OFFSET] = offset + 1
-                        tmp_dictionary[index][DICTIONARY_ENTRY_CHILD_COUNT] = \
-                            tmp_dictionary[offset][DICTIONARY_ENTRY_CHILD_COUNT]
+                        tmp_dictionary[index][DICTIONARY_ENTRY_CHILD_COUNT] = child_count
                     else:
-                        tmp_dictionary[index][DICTIONARY_ENTRY_OFFSET] = offset
-                        tmp_dictionary[index][DICTIONARY_ENTRY_CHILD_COUNT] = num_entries
+                        tmp_dictionary[index][DICTIONARY_ENTRY_CHILD_COUNT] = 1
 
                 was_expanded = True
                 break
@@ -1138,10 +1134,11 @@ def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
                         print('Error parsing profile')
                     sys.exit(1)
 
-            num_entries, offset = add_dictionary_entries(dictionary, entity_repo, entity,
-                                                         entity_offset_map, is_parent_array=False)
+            add_dictionary_entries(dictionary, entity_repo, entity, entity_offset_map, is_parent_array=True)
             dictionary = generate_dictionary(dictionary, entity_repo, entity_offset_map)
             ver = get_latest_version_as_ver32(entity)
+            if verbose:
+                print(entity_offset_map)
 
         if source_type == 'annotation':
             dictionary = generate_annotation_dictionary(json_schema_dirs, entity_repo, entity_offset_map)
@@ -1152,7 +1149,6 @@ def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
 
         # Generate JSON dictionary.
         json_dictionary = generate_json_dictionary(dictionary, dictionary_byte_array, entity, ver)
-
         # Return the named tuple.
         return (SchemaDictionary(dictionary=dictionary,
                                  dictionary_byte_array=dictionary_byte_array,
