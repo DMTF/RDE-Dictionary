@@ -213,6 +213,18 @@ def get_qualified_entity_name(entity):
     return get_namespace(entity) + '.' + entity.get('Name')
 
 
+def get_entity_name(entity):
+    """
+    Returns the entity name after stripping off namespace and/or version information
+
+    Args:
+        entity: The full entity name
+    """
+
+    components = entity.split('.')
+    return components[len(components)-1]
+
+
 def extract_doc_name_from_url(url):
     m = re.compile('http://.*/(.*\.xml)').match(url)
     if m:
@@ -507,7 +519,8 @@ def add_dictionary_row(dictionary, index, seq_num, format, format_flags, field_s
     dictionary.append([index, seq_num, format, format_flags, field_string, child_count, offset])
 
 
-def add_dictionary_entries(schema_dictionary, entity_repo, entity, entity_offset_map, is_parent_array):
+def add_dictionary_entries(schema_dictionary, entity_repo, entity, entity_offset_map, is_parent_array,
+                           anonymous_entry_name=''):
     if entity in entity_repo:
         entity_type = entity_repo[entity][ENTITY_REPO_TUPLE_TYPE_INDEX]
         start = len(schema_dictionary)
@@ -530,10 +543,10 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity, entity_offset
 
             return offset, len(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX])
 
-        # For a set or enum add a row indicating this is a set or enum if used in the context of an array
+        # For a set or enum add an anonymous entry indicating this is a set or enum if used in the context of an array
         offset = start
         if is_parent_array and (entity_type == 'Set' or entity_type == 'Enum'):
-            add_dictionary_row(schema_dictionary, start, 0, entity_type, '', '',
+            add_dictionary_row(schema_dictionary, start, 0, entity_type, '', anonymous_entry_name,
                                len(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]), start + 1)
             start = start + 1
 
@@ -1134,7 +1147,7 @@ def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
                         print('Error parsing profile')
                     sys.exit(1)
 
-            add_dictionary_entries(dictionary, entity_repo, entity, entity_offset_map, is_parent_array=True)
+            add_dictionary_entries(dictionary, entity_repo, entity, entity_offset_map, True, get_entity_name(entity))
             dictionary = generate_dictionary(dictionary, entity_repo, entity_offset_map)
             ver = get_latest_version_as_ver32(entity)
             if verbose:

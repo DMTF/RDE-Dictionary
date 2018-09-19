@@ -902,7 +902,7 @@ def bej_decode(schema_dictionary, annotation_dictionary):
 
     bej_decode_stream(schema_dictionary, annotation_dictionary,
                       load_dictionary_subset_by_key_sequence(schema_dictionary, 0, -1),
-                      1, is_seq_array_index=False)
+                      1, is_seq_array_index=False, add_name=False)
 
 
 if __name__ == '__main__':
