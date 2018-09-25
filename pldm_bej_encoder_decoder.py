@@ -528,11 +528,13 @@ def is_payload_annotation(property):
 
 def get_annotation_parts(property):
     """
-
-    Returns: property, annotation class, annotation name
+    Returns the schema property name (if present) and the annotation property name
+	
+    Returns: schema property name, annotation property name
     """
-    m = re.compile('(.*)@(.*)\.(.*)').match(property)
-    return m.group(1), m.group(2), m.group(3)
+    m = re.compile('(.*)(@.*\..*)').match(property)
+
+    return m.group(1), m.group(2)
 
 
 def get_annotation_name(annotation_property):
@@ -543,19 +545,11 @@ def get_annotation_name(annotation_property):
 odata_dictionary_entries = {}
 
 
-def get_annotation_dictionary_entries(annotation_dictionary, property):
-    m = re.compile('.*@(.*)\..*').match(property)
-    annotation_class = m.group(1)
-
+def get_annotation_dictionary_entries(annotation_dictionary):
     # TODO: cache the main annotations
     base_entry = DictionaryByteArrayStream(annotation_dictionary, 0, -1).get_next_entry()
-    annotation_entries = load_dictionary_subset_by_key_name(annotation_dictionary, base_entry[DICTIONARY_ENTRY_OFFSET],
-                                                            base_entry[DICTIONARY_ENTRY_CHILD_COUNT])
-    if annotation_class in annotation_entries:
-        return load_dictionary_subset_by_key_name(annotation_dictionary,
-                                                  annotation_entries[annotation_class][DICTIONARY_ENTRY_OFFSET],
-                                                  annotation_entries[annotation_class][DICTIONARY_ENTRY_CHILD_COUNT])
-    return {}
+    return load_dictionary_subset_by_key_name(annotation_dictionary, base_entry[DICTIONARY_ENTRY_OFFSET],
+                                              base_entry[DICTIONARY_ENTRY_CHILD_COUNT])
 
 
 def bej_encode_enum(output_stream, dict_to_use, dict_entry, sequence_number_with_dictionary_selector, enum_value):
@@ -634,8 +628,8 @@ def bej_encode_stream(output_stream, json_data, schema_dict, annot_dict, dict_to
 
             if is_payload_annotation(prop):
                 # two kinds - property annotation (e.g. Status@Message.ExtendedInfo) or payload annotation
-                schema_property, annotation_class, annotation_name = get_annotation_parts(prop)
-                entry = get_annotation_dictionary_entries(annotation_dictionary, prop)[annotation_name]
+                schema_property, annotation_property = get_annotation_parts(prop)
+                entry = get_annotation_dictionary_entries(annotation_dictionary)[annotation_property]
                 dictionary_selector_bit_value = BEJ_DICTIONARY_SELECTOR_ANNOTATION
                 tmp_dict_to_use = annotation_dictionary
 
@@ -661,9 +655,9 @@ def bej_encode_stream(output_stream, json_data, schema_dict, annot_dict, dict_to
                 #                    Length
                 #                        Value(value: can be a complex type)
                 # e.g Status@Message.ExtendedInfo
-                schema_property, annotation_class, annotation_name = get_annotation_parts(prop)
-                prop_seq = (dict_entries[schema_property][DICTIONARY_ENTRY_SEQUENCE_NUMBER] << 1) | \
-                      BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA
+                schema_property, annotation_property = get_annotation_parts(prop)
+                prop_seq = (dict_entries[schema_property][DICTIONARY_ENTRY_SEQUENCE_NUMBER] << 1) \
+                           | BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA
 
                 nested_stream = bej_pack_property_annotation_start(output_stream)
 
@@ -699,29 +693,13 @@ def get_seq_and_dictionary_selector(seq):
 
 
 def get_full_annotation_name_from_sequence_number(seq, annotation_dictionary):
-    annotation_class = ''
-    if seq % 4 == 0:
-        annotation_class = 'odata'
-    elif seq % 4 == 1:
-        annotation_class = 'Message'
-    elif seq % 4 == 2:
-        annotation_class = 'Redfish'
-    else:
-        print('Unknown annotation class')
-        exit()
-
     # TODO: cache the main annotations
     base_entry = DictionaryByteArrayStream(annotation_dictionary, 0, -1).get_next_entry()
-    annotation_entries = load_dictionary_subset_by_key_name(annotation_dictionary, base_entry[DICTIONARY_ENTRY_OFFSET],
-                                                            base_entry[DICTIONARY_ENTRY_CHILD_COUNT])
-    if annotation_class in annotation_entries:
-        entries = load_dictionary_subset_by_key_sequence(
-            annotation_dictionary,
-            annotation_entries[annotation_class][DICTIONARY_ENTRY_OFFSET],
-            annotation_entries[annotation_class][DICTIONARY_ENTRY_CHILD_COUNT])
-        return '@' + annotation_class + '.' + entries[seq][DICTIONARY_ENTRY_NAME]
+    annotation_entries = load_dictionary_subset_by_key_sequence(annotation_dictionary,
+                                                                base_entry[DICTIONARY_ENTRY_OFFSET],
+                                                                base_entry[DICTIONARY_ENTRY_CHILD_COUNT])
 
-    return ''
+    return annotation_entries[seq][DICTIONARY_ENTRY_NAME]
 
 
 def bej_decode_enum_value(dict_to_use, dict_entry, value):
@@ -755,28 +733,10 @@ def bej_decode_property_annotation_name(annotation_dict, annot_seq, prop_seq, en
     output_stream.write('"' + prop_name + annot_name + '":')
 
 
-def get_annotation_dictionary_entries_from_seq(annot_seq, annotation_dictionary):
-    annotation_class = ''
-    if annot_seq % 4 == 0:
-        annotation_class = 'odata'
-    elif annot_seq % 4 == 1:
-        annotation_class = 'Message'
-    elif annot_seq % 4 == 2:
-        annotation_class = 'Redfish'
-    else:
-        print('Unknown annotation class')
-        exit()
-
-    # TODO: cache the main annotations
+def get_annotation_dictionary_entries_by_seq(annotation_dictionary):
     base_entry = DictionaryByteArrayStream(annotation_dictionary, 0, -1).get_next_entry()
-    annotation_entries = load_dictionary_subset_by_key_name(annotation_dictionary, base_entry[DICTIONARY_ENTRY_OFFSET],
-                                                            base_entry[DICTIONARY_ENTRY_CHILD_COUNT])
-
-    if annotation_class in annotation_entries:
-        return load_dictionary_subset_by_key_sequence(annotation_dictionary,
-                                                  annotation_entries[annotation_class][DICTIONARY_ENTRY_OFFSET],
-                                                  annotation_entries[annotation_class][DICTIONARY_ENTRY_CHILD_COUNT])
-    return {}
+    return load_dictionary_subset_by_key_sequence(annotation_dictionary, base_entry[DICTIONARY_ENTRY_OFFSET],
+                                              base_entry[DICTIONARY_ENTRY_CHILD_COUNT])
 
 
 def bej_decode_stream(schema_dict, annotation_dict, entries_by_seq, prop_count, is_seq_array_index, add_name=True):
@@ -878,7 +838,7 @@ def bej_decode_stream(schema_dict, annotation_dict, entries_by_seq, prop_count, 
                                                 output_stream)
 
             bej_decode_stream(schema_dict, annotation_dict,
-                              get_annotation_dictionary_entries_from_seq(annot_seq, annotation_dict),
+                              get_annotation_dictionary_entries_by_seq(annotation_dict),
                               prop_count=1, is_seq_array_index=False, add_name=False)
         else:
             print('Unable to decode')

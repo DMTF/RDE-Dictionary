@@ -108,16 +108,14 @@ if __name__ == '__main__':
                     print("Error: Exception type: {0}, message: {1}".format(ex.__class__.__name__, str(ex)))
                     exit(1)
 
-
     # Generate the annotation dictionary
     print('Generating annotation dictionary...')
     try:
-        annotation_dictionary = rde_dictionary_module.generate_schema_dictionary(
+        annotation_dictionary = rde_dictionary_module.generate_annotation_schema_dictionary(
             'annotation',
             [schema_test_dir + '/metadata'],
             [schema_test_dir + '/json-schema'],
-            'RedfishExtensions.PropertyPattern',
-            'RedfishExtensions_v1.xml'
+            'v1_0_0'
         )
 
         if annotation_dictionary and annotation_dictionary.dictionary \
@@ -126,12 +124,12 @@ if __name__ == '__main__':
                   len(annotation_dictionary.dictionary_byte_array))
             with open('annotation.bin', 'wb') as annotaton_bin:
                 annotaton_bin.write(bytearray(annotation_dictionary.dictionary_byte_array))
+            rde_dictionary_module.print_binary_dictionary(annotation_dictionary.dictionary_byte_array)
 
     except Exception as ex:
         print("Error: Could not generate JSON schema dictionary for schema annotation")
         print("Error: Exception type: {0}, message: {1}".format(ex.__class__.__name__, str(ex)))
         exit(1)
-
 
     # Generate the major schema dictionaries
     for major_schema in MAJOR_SCHEMA_DICTIONARY_LIST:
@@ -189,7 +187,7 @@ if __name__ == '__main__':
         os.remove('pdr.txt')
         os.remove(major_schema.output_encoded_filename)
         os.remove(major_schema.dictionary_filename)
-        
+
     # cleanup
     os.remove('annotation.bin')
 
