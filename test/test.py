@@ -99,7 +99,9 @@ if __name__ == '__main__':
                     )
 
                     if schema_dictionary and schema_dictionary.dictionary and schema_dictionary.json_dictionary:
-                        print(filename, 'Entries:', len(schema_dictionary.dictionary), 'Size:', len(schema_dictionary.dictionary_byte_array) )
+                        print(filename, 'Entries:', len(schema_dictionary.dictionary),
+                              'Size:', len(schema_dictionary.dictionary_byte_array),
+                              'Url:', json.loads(schema_dictionary.json_dictionary)['schema_url'])
                     else:
                         print(filename, "Missing entities")
 

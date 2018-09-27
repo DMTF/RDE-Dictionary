@@ -5,7 +5,7 @@
 <!--#                                                                                      -->
 <!--# For a detailed change log, see the README file contained in the DSP8010 bundle,      -->
 <!--# available at http://www.dmtf.org/standards/redfish                                   -->
-<!--# Copyright 2014-2018 Distributed Management Task Force, Inc. (DMTF).                  -->
+<!--# Copyright 2014-2018 DMTF.                                                            -->
 <!--# For the full DMTF copyright policy, see http://www.dmtf.org/about/policies/copyright -->
 <!--################################################################################       -->
 <!---->
@@ -49,6 +49,9 @@
   <edmx:Reference Uri="http://redfish.dmtf.org/schemas/v1/Protocol_v1.xml">
     <edmx:Include Namespace="Protocol"/>
   </edmx:Reference>
+  <edmx:Reference Uri="http://redfish.dmtf.org/schemas/v1/PCIeDevice_v1.xml">
+    <edmx:Include Namespace="PCIeDevice"/>
+  </edmx:Reference>
   <edmx:Reference Uri="http://redfish.dmtf.org/schemas/swordfish/v1/StorageService_v1.xml">
     <edmx:Include Namespace="StorageService"/>
   </edmx:Reference>
@@ -76,6 +79,13 @@
           <Record>
             <PropertyValue Property="Deletable" Bool="false"/>
           </Record>
+        </Annotation>
+        <Annotation Term="Redfish.Uris">
+          <Collection>
+            <String>/redfish/v1/Systems/{ComputerSystemId}/Storage/{StorageId}</String>
+            <String>/redfish/v1/CompositionService/ResourceBlocks/{ResourceBlockId}/Storage/{StorageId}</String>
+            <String>/redfish/v1/CompositionService/ResourceBlocks/{ResourceBlockId}/Systems/{ComputerSystemId}/Storage/{StorageId}</String>
+          </Collection>
         </Annotation>
       </EntityType>
 
@@ -490,6 +500,10 @@
         <Property Name="CacheSummary" Type="Storage.v1_5_0.CacheSummary" Nullable="false">
           <Annotation Term="OData.Description" String="This object describes the cache memory of the storage controller in general detail."/>
           <Annotation Term="OData.LongDescription" String="This object shall contain properties which describe the cache memory for the current resource."/>
+        </Property>
+        <Property Name="PCIeInterface" Type="PCIeDevice.PCIeInterface">
+          <Annotation Term="OData.Description" String="The PCIe interface details for this controller."/>
+          <Annotation Term="OData.LongDescription" String="This object shall contain details on the PCIe interface used to connect this PCIe-based controller to its host."/>
         </Property>
       </EntityType>
 

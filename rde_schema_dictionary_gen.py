@@ -448,6 +448,16 @@ def to_ver32(version):
         return 0xFFFFFFFF
 
 
+def to_redfish_version(ver32):
+    """
+    Converts a PLDM ver32 number to a Redfish version in the format vMajor_Minor_Errata
+    """
+    if ver32 == 0xFFFFFFFF:  # un-versioned
+        return ''
+    else:
+        return 'v'+str((ver32 >> 24) & 0x0F)+'_'+str((ver32 >> 16) & 0x0F)+'_'+str((ver32 >> 8) & 0x0F)
+
+
 def get_latest_version_as_ver32(entity):
     """
     Returns the latest version of the entity as a PLDM ver32 array of bytes
@@ -650,12 +660,28 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity, entity_offset
         return 0, 0
 
 
-def generate_json_dictionary(dictionary, dictionary_byte_array, entity, ver):
+def generate_json_dictionary(json_schema_dirs, dictionary, dictionary_byte_array, entity):
+    stream = DictionaryByteArrayStream(dictionary_byte_array)
+
+    # skip the version-tag, dictionary flags and entries to get to the version
+    stream.get_int(1)  # ver-tag
+    stream.get_int(1)  # dictionary flags
+    stream.get_int(2)  # #entries
+    ver32 = stream.get_int(4)
+    version_str = to_redfish_version(ver32)
+
     summary = {}
 
     summary['schema_name'] = entity
-    summary['schema_version'] = ver
-    summary['schema_url'] = 'https://redfish.dmtf.org/schemas/' + entity.split('.')[0] + '.' + get_latest_version(entity) + '.json'
+    summary['schema_version'] = ver32
+
+    # Special case for annotations
+    if entity == 'annotation':
+        summary['schema_url'] = 'http://redfish.dmtf.org/schemas/v1/redfish-payload-annotations.'\
+                                +to_redfish_version(ver32)+'.json'
+    else:
+        summary['schema_url'] = find_schema_url(json_schema_dirs, entity.split('.')[0], version_str,
+                                                entity.split('.')[1])
 
     assert(dictionary_binary_size(dictionary) == len(dictionary_byte_array))
     summary['schema_dictionary_length_bytes'] = dictionary_binary_size(dictionary)
@@ -663,7 +689,7 @@ def generate_json_dictionary(dictionary, dictionary_byte_array, entity, ver):
     summary['schema_dictionary_bytes'] = dictionary_byte_array
     assert(len(summary['schema_dictionary_bytes']) == summary['schema_dictionary_length_bytes'])
 
-    return (json.dumps(summary))
+    return json.dumps(summary)
 
 
 def print_dictionary_summary(dictionary, dictionary_byte_array):
@@ -765,14 +791,98 @@ def fix_annotations_sequence_numbers(annotation_dictionary, annotation_index, st
             (annotation_dictionary[index][DICTIONARY_ENTRY_SEQUENCE_NUMBER] << 2) | stripe_factor
 
 
+def get_ref_parts(ref):
+    """
+    Returns the different parts of a ref: the namespace, version and entity
+    e.g. "$ref": "http://redfish.dmtf.org/schemas/swordfish/v1/Volume.v1_0_0.json#/definitions/Volume"
+    will return Volume, v1_0_0, Volume
+    """
+    [schema_url, entity] = ref.split('#')
+    entity = entity[entity.rfind('/') + 1:]  # remove preceding /../ from entity
+
+    m = re.compile('.*/(\w+)\.?(\w*)\.json$').match(schema_url)
+    if m:
+        return m.group(1), m.group(2), entity
+
+    return None, None, None
+
+
 def get_entity_name_from_json_ref(ref):
     # e.g. $ref": "http://redfish.dmtf.org/schemas/v1/Settings.json#/definitions/Settings
     # should translate to Settings.Settings
-    [namespace, entity] = ref.split('#')
-    namespace = namespace[namespace.rfind('/')+1:namespace.rfind('.')]  # remove http://... from namespace and entity
-    entity = entity[entity.rfind('/')+1:]  # remove preceding /../ from entity
-
+    namespace, version, entity = get_ref_parts(ref)
     return namespace+'.'+entity
+
+
+def compare_redfish_versions(ver1, ver2):
+    """
+    Return 0 if ver1 == ver2, 1 if ver1 > ver2 and -1 if ver1 < ver2
+    """
+    ver32_ver1 = to_ver32(ver1)
+    ver32_ver2 = to_ver32(ver2)
+    if ver32_ver1 == ver32_ver2:
+        return 0
+    elif ver32_ver1 < ver32_ver2:
+        return -1
+    else:
+        return 1
+
+
+def find_schema_url(json_schema_dirs, namespace, version, entity):
+    """
+    Returns the url for a specific namespace+version+entity
+
+    Args:
+        json_schema_dirs: list of json schema directories to search for url information
+        namespace: namespace the entity resides in
+        version: version information
+        entity: entity name
+
+    Returns:
+        schema url if found, otherwise empty string
+    """
+
+    # hack - to handle the case where the dictionary was generated for a version that is available in csdl but not
+    # in json-schema yet, we record the closest version found and return that url by modifying it's version.
+    closest_url = ''
+    closest_ver = ''
+
+    # find the un-versioned json schema file for this namespace
+    unversioned_schema_filename = namespace + '.json'
+    for json_schema_dir in json_schema_dirs:
+        if os.path.isfile(os.path.join(json_schema_dir, unversioned_schema_filename)):
+            with open(os.path.join(json_schema_dir, unversioned_schema_filename)) as file:
+                json_schema = json.load(file)
+            if 'anyOf' in json_schema['definitions'][entity]:
+                list_of_refs = json_schema['definitions'][entity]['anyOf']
+                for ref in list_of_refs:
+                    if '$ref' in ref:
+                        ref_namespace, ref_version, ref_entity = get_ref_parts(ref['$ref'])
+
+                        if version == '':  # this is an un-versioned. We just use the url of the first $ref we find
+                            url = ref['$ref']
+                            url = url.replace(ref_namespace, namespace)
+                            url = url.replace(ref_entity, entity)
+                            url = url.replace('.'+ref_version, '')
+                            return url
+
+                        elif namespace == ref_namespace and entity == ref_entity:  # versioned namespace
+                            if version == ref_version:
+                                return ref['$ref']
+                            else:
+                                # hack - let's record this as a candidate url if it is close enough
+                                # (for cases where the json-schema does not have the url yet)
+                                if closest_url == '' or (compare_redfish_versions(ref_version, closest_ver) == 1
+                                                         and compare_redfish_versions(ref_version, version) == -1):
+                                    closest_url = ref['$ref']
+                                    closest_ver = ref_version
+
+    # if we are here, we didn't find an exact match but we may have found one close enough.
+    if closest_url != '':
+        # substitute the version
+        return closest_url.replace(closest_ver, version)
+    else:
+        return ''
 
 
 def convert_json_type_to_bej_format(k, v, entity_repo):
@@ -1157,7 +1267,6 @@ class DictionaryByteArrayStream:
         self._current_index += size
         return value
 
-
     def get_current_offset(self):
         return self._current_index
 
@@ -1283,7 +1392,7 @@ def generate_annotation_schema_dictionary(source_type, csdl_schema_dirs, json_sc
         dictionary_byte_array = generate_byte_array(dictionary, ver, False)
 
         # Generate JSON dictionary.
-        json_dictionary = generate_json_dictionary(dictionary, dictionary_byte_array, entity, ver)
+        json_dictionary = generate_json_dictionary(json_schema_dirs, dictionary, dictionary_byte_array, 'annotation')
         # Return the named tuple.
         return (SchemaDictionary(dictionary=dictionary,
                                  dictionary_byte_array=dictionary_byte_array,
@@ -1412,7 +1521,7 @@ def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
         dictionary_byte_array = generate_byte_array(dictionary, ver, False)
 
         # Generate JSON dictionary.
-        json_dictionary = generate_json_dictionary(dictionary, dictionary_byte_array, entity, ver)
+        json_dictionary = generate_json_dictionary(json_schema_dirs, dictionary, dictionary_byte_array, entity)
         # Return the named tuple.
         return (SchemaDictionary(dictionary=dictionary,
                                  dictionary_byte_array=dictionary_byte_array,

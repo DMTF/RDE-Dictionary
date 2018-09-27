@@ -5,7 +5,7 @@
 <!--#                                                                                      -->
 <!--# For a detailed change log, see the README file contained in the DSP8010 bundle,      -->
 <!--# available at http://www.dmtf.org/standards/redfish                                   -->
-<!--# Copyright 2014-2018 Distributed Management Task Force, Inc. (DMTF).                  -->
+<!--# Copyright 2014-2018 DMTF.                                                            -->
 <!--# For the full DMTF copyright policy, see http://www.dmtf.org/about/policies/copyright -->
 <!--################################################################################       -->
 <!---->
@@ -61,6 +61,13 @@
           <Record>
             <PropertyValue Property="Deletable" Bool="false"/>
           </Record>
+        </Annotation>
+        <Annotation Term="Redfish.Uris">
+          <Collection>
+            <String>/redfish/v1/Systems/{ComputerSystemId}/Memory/{MemoryId}</String>
+            <String>/redfish/v1/CompositionService/ResourceBlocks/{ResourceBlockId}/Memory/{MemoryId}</String>
+            <String>/redfish/v1/CompositionService/ResourceBlocks/{ResourceBlockId}/Systems/{ComputerSystemId}/Memory/{MemoryId}</String>
+          </Collection>
         </Annotation>
       </EntityType>
 
@@ -879,7 +886,7 @@
 
     <Schema xmlns="http://docs.oasis-open.org/odata/ns/edm" Namespace="Memory.v1_6_0">
       <Annotation Term="Redfish.OwningEntity" String="DMTF"/>
-      <Annotation Term="OData.Description" String="This version was created to change the LongDescription of SecureEraseUnit.  It was also created to to define a new OverwriteUnit action.  It was also created to add IntelOptane to the MemoryType list."/>
+      <Annotation Term="OData.Description" String="This version was created to change the LongDescription of SecureEraseUnit.  It was also created to define a new OverwriteUnit action.  It also adds IntelOptane to the MemoryType list."/>
       <EntityType Name="Memory" BaseType="Memory.v1_5_1.Memory"/>
     </Schema>
 

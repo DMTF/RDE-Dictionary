@@ -5,7 +5,7 @@
 <!--#                                                                                      -->
 <!--# For a detailed change log, see the README file contained in the DSP8010 bundle,      -->
 <!--# available at http://www.dmtf.org/standards/redfish                                   -->
-<!--# Copyright 2014-2018 Distributed Management Task Force, Inc. (DMTF).                  -->
+<!--# Copyright 2014-2018 DMTF.                                                            -->
 <!--# For the full DMTF copyright policy, see http://www.dmtf.org/about/policies/copyright -->
 <!--################################################################################       -->
 <!---->
@@ -73,6 +73,9 @@
   <edmx:Reference Uri="http://redfish.dmtf.org/schemas/v1/JobService_v1.xml">
     <edmx:Include Namespace="JobService"/>
   </edmx:Reference>
+  <edmx:Reference Uri="http://redfish.dmtf.org/schemas/v1/TelemetryService_v1.xml">
+    <edmx:Include Namespace="TelemetryService"/>
+  </edmx:Reference>
 
   <edmx:DataServices>
 
@@ -96,6 +99,11 @@
           <Record>
             <PropertyValue Property="Deletable" Bool="false"/>
           </Record>
+        </Annotation>
+        <Annotation Term="Redfish.Uris">
+          <Collection>
+            <String>/redfish/v1/</String>
+          </Collection>
         </Annotation>
       </EntityType>
 
@@ -414,10 +422,12 @@
 
     <Schema xmlns="http://docs.oasis-open.org/odata/ns/edm" Namespace="ServiceRoot.v1_4_0">
       <Annotation Term="Redfish.OwningEntity" String="DMTF"/>
-      <Annotation Term="OData.Description" String="This version was created to add support of the 'excerpt' and 'only' query parameters to ProtocolFeaturesSupported.  It was also created to add the JobService property."/>
+
+      <Annotation Term="OData.Description" String="This version was created to add support of the 'excerpt' and 'only' query parameters to ProtocolFeaturesSupported.  It was also created to add the JobService and Telemetry properties."/>
 
       <EntityContainer Name="ServiceContainer" Extends="ServiceRoot.v1_2_0.ServiceContainer">
         <Singleton Name="JobService" Type="JobService.JobService"/>
+        <Singleton Name="TelemetryService" Type="TelemetryService.TelemetryService"/>
       </EntityContainer>
 
       <EntityType Name="ServiceRoot" BaseType="ServiceRoot.v1_3_2.ServiceRoot">
@@ -425,6 +435,12 @@
           <Annotation Term="OData.Permissions" EnumMember="OData.Permission/Read"/>
           <Annotation Term="OData.Description" String="This is a link to the JobService."/>
           <Annotation Term="OData.LongDescription" String="The classes structure shall only contain a reference to a resource that conforms to the JobService schema."/>
+          <Annotation Term="OData.AutoExpandReferences"/>
+        </NavigationProperty>
+        <NavigationProperty Name="TelemetryService" Type="TelemetryService.TelemetryService" Nullable="false">
+          <Annotation Term="OData.Permissions" EnumMember="OData.Permission/Read"/>
+          <Annotation Term="OData.Description" String="This is a link to the TelemetryService."/>
+          <Annotation Term="OData.LongDescription" String="The value shall be a link to the TelemetryService."/>
           <Annotation Term="OData.AutoExpandReferences"/>
         </NavigationProperty>
       </EntityType>
