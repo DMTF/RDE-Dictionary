@@ -504,7 +504,9 @@ def fix_enums(json_schema_dirs, entity_repo, key):
                     if json_enum is not None:
                         if verbose:
                             print(json_enum["enum"])
-                        enum_values = enum_values + list((Counter(json_enum["enum"]) - Counter(enum_values)).elements())
+                        new_enums = list((Counter(json_enum["enum"]) - Counter(enum_values)).elements())
+                        new_enums.sort()
+                        enum_values = enum_values + new_enums
                         if verbose:
                             print(enum_values)
 
