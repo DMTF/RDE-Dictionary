@@ -6,6 +6,9 @@
         {
             "AnotherBoolean": true,
             "LinkStatus": "NoLink"
+        }, 
+        {
+            "LinkStatus": "LinkDown"
         }
     ]
 }
