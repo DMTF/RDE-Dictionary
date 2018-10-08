@@ -414,11 +414,50 @@ def add_namespaces(csdl_schema_dirs, source_type, source, doc_list):
             add_namespaces(csdl_schema_dirs, source_type, dependent_source, doc_list)
 
 
-def get_latest_version(entity):
-    global includeNamespaces
+def get_all_versions(entity):
+    """
+    Search the namespaces for all 'entity.vMajor_Minor_Errata'
 
-    # search the namespaces for all 'entity.vMajor_Minor_Errata'
-    result = [key for key, value in includeNamespaces.items() if key.startswith(entity.split('.')[1]+'.')]
+    Args:
+        entity: The EntityType or ComplexType in the format Namespace.Entity (e.g. Drive.Drive)
+
+    Returns:
+        An array of all found versions of the given entity
+    """
+    global includeNamespaces
+    return [key for key, value in includeNamespaces.items() if key.startswith(entity.split('.')[1]+'.')]
+
+
+def validate_version(entity, version):
+    """
+    Determine if the entity.version is present in any namespace
+
+    Args:
+        entity: The EntityType or ComplexType in the format Namespace.Entity (e.g. Drive.Drive)
+        version: The Redfish version to validate
+
+    Returns:
+        True if the entity.version is found, False otherwise
+
+    """
+    versions = get_all_versions(entity)
+    if version in versions:
+        return True
+    else:
+        return False
+
+
+def get_latest_version(entity):
+    """
+    Get the latest (highest) version of the given entity
+
+    Args:
+        entity: The EntityType or ComplexType in the format Namespace.Entity (e.g. Drive.Drive)
+
+    Returns:
+        The latest Redfish version found of the entity
+    """
+    result = get_all_versions(entity)
 
     # The last item in result will have the latest version
     if len(result) > 1:  # This is a versioned namespace
@@ -1410,7 +1449,7 @@ def generate_annotation_schema_dictionary(source_type, csdl_schema_dirs, json_sc
 
 
 def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
-                               entity, schema_file_name, oem_entities=None,
+                               entity, schema_file_name, schema_version=None, oem_entities=None,
                                oem_schema_file_names=None, profile=None, schema_url=None):
     """ Generate the schema dictionary.
 
@@ -1499,6 +1538,16 @@ def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
         ver = ''
         dictionary = []
         if source_type == 'local':
+            # if a schema_version is provided, validate that the entity has the specified version
+            # otherwise, no schema_version is provided, just get the latest version
+            if schema_version:
+                if validate_version(entity, schema_version):
+                    ver = to_ver32(schema_version)
+                else:
+                    print('Error, cannot find', entity, 'version', schema_version)
+                    sys.exit(1)
+            else:
+                ver = get_latest_version_as_ver32(entity)
             # truncate the entity_repo first if a profile is specified
             is_truncated = False
             if profile:
@@ -1515,7 +1564,6 @@ def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
 
             add_dictionary_entries(dictionary, entity_repo, entity, entity_offset_map, True, get_entity_name(entity))
             dictionary = generate_dictionary(dictionary, entity_repo, entity_offset_map)
-            ver = get_latest_version_as_ver32(entity)
             if verbose:
                 print(entity_offset_map)
 
@@ -1556,6 +1604,7 @@ if __name__ == '__main__':
     local_parser.add_argument('-jd', '--jsonSchemaDirectories', nargs='*', type=str, required=True)
     local_parser.add_argument('-f', '--schemaFilename', type=str, required=True)
     local_parser.add_argument('-e', '--entity', type=str, required=True)
+    local_parser.add_argument('-v', '--schemaVersion', type=str, required=False)
     local_parser.add_argument('-oemf', '--oemSchemaFilenames', nargs='*', type=str, required=False)
     local_parser.add_argument('-oem', '--oemEntities', nargs='*', type=str, required=False)
     local_parser.add_argument('-p', '--profile', type=str, required=False)
@@ -1603,8 +1652,9 @@ if __name__ == '__main__':
     if args.source == 'local':
         schema_dictionary = generate_schema_dictionary(args.source, args.csdlSchemaDirectories,
                                                        args.jsonSchemaDirectories, args.entity,
-                                                       args.schemaFilename, args.oemEntities,
-                                                       args.oemSchemaFilenames, args.profile)
+                                                       args.schemaFilename, args.schemaVersion,
+                                                       args.oemEntities, args.oemSchemaFilenames,
+                                                       args.profile)
     elif args.source == 'remote':
         schema_dictionary = generate_schema_dictionary(args.source, None, None, args.entity, None,
                                                        None, None, None, args.schemaURL)
