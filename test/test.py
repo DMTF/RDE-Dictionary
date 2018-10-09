@@ -143,6 +143,7 @@ if __name__ == '__main__':
                 ['test/schema/json-schema'],
                 major_schema.entity,
                 major_schema.schema_filename,
+                None,
                 major_schema.oem_entities.split(),
                 major_schema.oem_schema_filenames.split(),
                 major_schema.profile
