@@ -441,6 +441,7 @@ def validate_version(entity, version):
 
     """
     versions = get_all_versions(entity)
+    version = entity.split('.')[1]+'.'+version
     if version in versions:
         return True
     else:
@@ -1544,8 +1545,11 @@ def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
                 if validate_version(entity, schema_version):
                     ver = to_ver32(schema_version)
                 else:
-                    print('Error, cannot find', entity, 'version', schema_version)
-                    sys.exit(1)
+                    if verbose:
+                        print('Error, cannot find', entity, 'version', schema_version)
+                    return (SchemaDictionary(dictionary=None,
+                                             dictionary_byte_array=None,
+                                             json_dictionary=None))
             else:
                 ver = get_latest_version_as_ver32(entity)
             # truncate the entity_repo first if a profile is specified

@@ -11,6 +11,7 @@ rde_lib_name = "rde_schema_dictionary_gen"
 TestSpecification = namedtuple('TestSpecification', 'csdl_directories '
                                                     'schema_filename '
                                                     'entity '
+                                                    'schema_version '
                                                     'oem_schema_filenames '
                                                     'oem_entities '
                                                     'profile '
@@ -25,6 +26,7 @@ MAJOR_SCHEMA_DICTIONARY_LIST = [
                                     '',
                                     '',
                                     '',
+                                    '',
                                     'DummySimple.bin',
                                     'test/dummysimple.json',
                                     'DummySimple_bej.bin'),
@@ -33,6 +35,7 @@ MAJOR_SCHEMA_DICTIONARY_LIST = [
                                     'test/schema/metadata test/schema/oem-csdl',
                                     'Drive_v1.xml',
                                     'Drive.Drive',
+                                    '',
                                     'OEM1DriveExt_v1.xml OEM2DriveExt_v1.xml',
                                     'OEM1=OEM1DriveExt.OEM1DriveExt OEM2=OEM2DriveExt.OEM2DriveExt',
                                     '',                # profile
@@ -47,6 +50,7 @@ MAJOR_SCHEMA_DICTIONARY_LIST = [
                                     '',
                                     '',
                                     '',
+                                    '',
                                     'storage.bin',
                                     'test/storage.json',
                                     'storage_bej.bin'),
@@ -55,6 +59,19 @@ MAJOR_SCHEMA_DICTIONARY_LIST = [
                                     'test/schema/metadata',
                                     'Storage_v1.xml',
                                     'Storage.Storage',
+                                    'v1_2_0',
+                                    '',
+                                    '',
+                                    '',
+                                    'storage.bin',
+                                    'test/storage.json',
+                                    'storage_bej.bin'),
+
+                                TestSpecification(
+                                    'test/schema/metadata',
+                                    'Storage_v1.xml',
+                                    'Storage.Storage',
+                                    '',
                                     '',
                                     '',
                                     'test/example_profile_for_truncation.json',
@@ -143,7 +160,7 @@ if __name__ == '__main__':
                 ['test/schema/json-schema'],
                 major_schema.entity,
                 major_schema.schema_filename,
-                None,
+                major_schema.schema_version,
                 major_schema.oem_entities.split(),
                 major_schema.oem_schema_filenames.split(),
                 major_schema.profile
