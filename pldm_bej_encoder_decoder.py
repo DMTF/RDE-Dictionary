@@ -439,9 +439,7 @@ class DictionaryByteArrayStream:
             entry.append(self.get_int(2))  # child_count
 
             name_length = self.get_int(1)
-            format_length = self.get_int(1)
             name_offset = self.get_int(2)
-            format_offset = self.get_int(2)
 
             # fetch the name
             name = ''

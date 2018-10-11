@@ -685,8 +685,7 @@ def generate_json_dictionary(json_schema_dirs, dictionary, dictionary_byte_array
         summary['schema_url'] = find_schema_url(json_schema_dirs, entity.split('.')[0], version_str,
                                                 entity.split('.')[1])
 
-    assert(dictionary_binary_size(dictionary) == len(dictionary_byte_array))
-    summary['schema_dictionary_length_bytes'] = dictionary_binary_size(dictionary)
+    summary['schema_dictionary_length_bytes'] = len(dictionary_byte_array)
     summary['schema_dictionary_crc_32'] = binascii.crc32(bytes(dictionary_byte_array))
     summary['schema_dictionary_bytes'] = dictionary_byte_array
     assert(len(summary['schema_dictionary_bytes']) == summary['schema_dictionary_length_bytes'])
@@ -702,7 +701,7 @@ def print_dictionary_summary(dictionary, dictionary_byte_array):
     for item in dictionary:
         total_field_string_size = total_field_string_size + len(item[DICTIONARY_ENTRY_FIELD_STRING])
     print("Field string size consumed (bytes):", total_field_string_size)
-    print('Total size (bytes):', dictionary_binary_size(dictionary))
+    print('Total size (bytes):', len(dictionary_byte_array))
     print('Signature:', hex(binascii.crc32(bytes(dictionary_byte_array))))
 
 
@@ -1120,21 +1119,25 @@ def dictionary_binary_entry_size():
     entry_child_pointer_offset_size = 2
     entry_child_count_size = 2
     entry_name_length_size = 1
-    entry_format_length_size = 1
     entry_name_offset_size = 2
-    entry_format_offset_size = 2
 
     return entry_format_size + entry_sequence_number_size + entry_child_pointer_offset_size + entry_child_count_size + \
-           entry_name_length_size + entry_format_length_size + entry_name_offset_size + entry_format_offset_size
+           entry_name_length_size + entry_name_offset_size
 
 
-def dictionary_binary_size(dictionary):
+def dictionary_binary_size(dictionary, copyright):
     total_field_string_size = 0
     for item in dictionary:
         if len(item[DICTIONARY_ENTRY_FIELD_STRING]):
             total_field_string_size = total_field_string_size + len(item[DICTIONARY_ENTRY_FIELD_STRING]) \
                                    + 1  # for null termination
-    return dictionary_binary_header_size() + len(dictionary) * dictionary_binary_entry_size() + total_field_string_size
+    copyright_len = 0
+    if copyright:
+        copyright_len = len(copyright)
+
+    return dictionary_binary_header_size() + len(dictionary) * dictionary_binary_entry_size() + \
+           total_field_string_size + 2 + copyright_len
+
 
 
 def binary_offset_from_dictionary_offset(offset):
@@ -1146,6 +1149,7 @@ def dictionary_offset_from_binary_offset(offset):
         return int((offset - dictionary_binary_header_size() + 1)/dictionary_binary_entry_size())
     else:
         return offset
+
 
 bej_format_table = {
     'Set':          0x00,
@@ -1186,21 +1190,19 @@ def is_readonly(format):
     return (format & 0x02) != 0
 
 
-def generate_byte_array(dictionary, version, is_truncated):
+def generate_byte_array(dictionary, version, is_truncated, copyright):
     binary_data = []
     binary_data.append(0x00)  # VersionTag
 
     # DictionaryFlags
     if is_truncated:
-        binary_data.append(0x01)
-    else:
         binary_data.append(0x00)
+    else:
+        binary_data.append(0x01)
 
     binary_data.extend(len(dictionary).to_bytes(2, 'little', signed=False))  # EntryCount
-
     binary_data.extend(version.to_bytes(4, 'little', signed=False))  # SchemaVersion
-
-    binary_data.extend(dictionary_binary_size(dictionary).to_bytes(4, 'little', signed=False))  # DictionarySize
+    binary_data.extend(dictionary_binary_size(dictionary, copyright).to_bytes(4, 'little', signed=False))  # DictionarySize
 
     # track property name offsets, this is initialized to the first property name
     name_offset = dictionary_binary_header_size() + (len(dictionary) * dictionary_binary_entry_size())
@@ -1233,9 +1235,6 @@ def generate_byte_array(dictionary, version, is_truncated):
         else:
             binary_data.append(0x00)
 
-        # TODO: FormatLength
-        binary_data.append(0x00)
-
         # NameOffset
         if item[DICTIONARY_ENTRY_FIELD_STRING]:
             binary_data.extend(name_offset.to_bytes(2, 'little'))
@@ -1243,14 +1242,20 @@ def generate_byte_array(dictionary, version, is_truncated):
         else:
             binary_data.extend([0x00, 0x00])
 
-        # TODO: FormatOffset
-        binary_data.extend([0x00, 0x00])
-
     # Add the property names
     for item in dictionary:
         if item[DICTIONARY_ENTRY_FIELD_STRING]:
             binary_data.extend([ord(elem) for elem in item[DICTIONARY_ENTRY_FIELD_STRING]])
             binary_data.append(0x00)
+
+    # Add the copyright string if any
+    if copyright:
+        binary_data.extend(len(copyright).to_bytes(2, 'little'))
+        if len(copyright):
+            binary_data.extend([ord(elem) for elem in copyright])
+            binary_data.append(0x00)
+    else:
+        binary_data.extend([0x00, 0x00])
 
     return binary_data
 
@@ -1301,9 +1306,7 @@ def print_binary_dictionary(byte_array):
         offset = stream.get_int(2)
         child_count = stream.get_int(2)
         name_length = stream.get_int(1)
-        format_length = stream.get_int(1)
         name_offset = stream.get_int(2)
-        format_offset = stream.get_int(2)
 
         name = ''
         if name_length > 0:
@@ -1325,7 +1328,7 @@ SchemaDictionary = namedtuple('SchemaDictionary', 'dictionary dictionary_byte_ar
 
 
 def generate_annotation_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
-                                          version=None):
+                                          version=None, copyright=None):
     """ Generate the annotation schema dictionary.
 
     Args:
@@ -1391,7 +1394,7 @@ def generate_annotation_schema_dictionary(source_type, csdl_schema_dirs, json_sc
             ver = to_ver32(version)
 
         # Generate dictionary_byte_array.
-        dictionary_byte_array = generate_byte_array(dictionary, ver, False)
+        dictionary_byte_array = generate_byte_array(dictionary, ver, False, copyright)
 
         # Generate JSON dictionary.
         json_dictionary = generate_json_dictionary(json_schema_dirs, dictionary, dictionary_byte_array, 'annotation')
@@ -1411,7 +1414,8 @@ def generate_annotation_schema_dictionary(source_type, csdl_schema_dirs, json_sc
 
 def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
                                entity, schema_file_name, oem_entities=None,
-                               oem_schema_file_names=None, profile=None, schema_url=None):
+                               oem_schema_file_names=None, profile=None, schema_url=None,
+                               copyright=None):
     """ Generate the schema dictionary.
 
     Args:
@@ -1424,6 +1428,7 @@ def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
         oem_schema_file_names: List of OEM schema file names (default None).
         profile: Schema profile (default None)
         schema_url: Schema URL. Used when source_type is remote (default None).
+        copyright: Copyright string that should be appended to the binary dictionary
 
     Return:
         SchemaDictionary: Named tuple which has the following fields:
@@ -1520,7 +1525,7 @@ def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
                 print(entity_offset_map)
 
         # Generate dictionary_byte_array.
-        dictionary_byte_array = generate_byte_array(dictionary, ver, False)
+        dictionary_byte_array = generate_byte_array(dictionary, ver, False, copyright)
 
         # Generate JSON dictionary.
         json_dictionary = generate_json_dictionary(json_schema_dirs, dictionary, dictionary_byte_array, entity)
@@ -1558,6 +1563,7 @@ if __name__ == '__main__':
     local_parser.add_argument('-e', '--entity', type=str, required=True)
     local_parser.add_argument('-oemf', '--oemSchemaFilenames', nargs='*', type=str, required=False)
     local_parser.add_argument('-oem', '--oemEntities', nargs='*', type=str, required=False)
+    local_parser.add_argument('-cp', '--copyright', type=str, required=False)
     local_parser.add_argument('-p', '--profile', type=str, required=False)
     local_parser.add_argument('-o', '--outputFile', type=argparse.FileType('wb'), required=False)
     local_parser.add_argument('-oj', '--outputJsonDictionaryFile', type=argparse.FileType('w'), required=False)
@@ -1572,6 +1578,7 @@ if __name__ == '__main__':
     annotation_v2_parser.add_argument('-cd', '--csdlSchemaDirectories', nargs='*', type=str, required=True)
     annotation_v2_parser.add_argument('-jd', '--jsonSchemaDirectories', nargs='*', type=str, required=True)
     annotation_v2_parser.add_argument('-v', '--version', type=str, required=True)
+    annotation_v2_parser.add_argument('-cp', '--copyright', type=str, required=False)
     annotation_v2_parser.add_argument('-o', '--outputFile', type=argparse.FileType('wb'), required=False)
     annotation_v2_parser.add_argument('-oj', '--outputJsonDictionaryFile', type=argparse.FileType('w'), required=False)
 
@@ -1604,7 +1611,9 @@ if __name__ == '__main__':
         schema_dictionary = generate_schema_dictionary(args.source, args.csdlSchemaDirectories,
                                                        args.jsonSchemaDirectories, args.entity,
                                                        args.schemaFilename, args.oemEntities,
-                                                       args.oemSchemaFilenames, args.profile)
+                                                       args.oemSchemaFilenames, args.profile,
+                                                       None,
+                                                       args.copyright)
     elif args.source == 'remote':
         schema_dictionary = generate_schema_dictionary(args.source, None, None, args.entity, None,
                                                        None, None, None, args.schemaURL)
@@ -1616,7 +1625,8 @@ if __name__ == '__main__':
     elif args.source == 'annotation':
         # Just choose a dummy complex entity type to start the annotation dictionary generation process.
         schema_dictionary = generate_annotation_schema_dictionary(args.source, args.csdlSchemaDirectories,
-                                                                  args.jsonSchemaDirectories, args.version)
+                                                                  args.jsonSchemaDirectories, args.version,
+                                                                  args.copyright)
 
     # Print table data.
     if schema_dictionary.dictionary:

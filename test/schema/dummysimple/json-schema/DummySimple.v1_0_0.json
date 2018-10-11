@@ -44,16 +44,19 @@
                         "type": "object", 
                         "properties": {
                             "LinkStatus": {
-                                "minLength": 0, 
-                                "enum": [
-                                    "NoLink", 
-                                    "LinkDown", 
-                                    "LinkUp"
-                                ], 
-                                "type": "string"
+                                "anyOf": [
+                                    {
+                                        "$ref": "#/definitions/LinkStatus"
+                                    },
+                                    {
+                                        "type": "null"
+                                    }
+                                ],
+                                "readOnly": true                                
                             }, 
                             "AnotherBoolean": {
-                                "type": "boolean"
+                                "type": "boolean",
+                                "readOnly": true
                             }
                         }
                     }, 
@@ -61,13 +64,16 @@
                 }
             }, 
             "SampleIntegerProperty": {
-                "type": "integer"
+                "type": "integer",
+                "readOnly": true
             }, 
             "Id": {
-                "type": "string"
+                "type": "string",
+                "readOnly": true
             }, 
             "SampleEnabledProperty": {
-                "type": "boolean"
+                "type": "boolean",
+                "readOnly": true
             }
         }
     }, 
