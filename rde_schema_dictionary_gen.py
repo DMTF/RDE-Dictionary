@@ -1248,13 +1248,12 @@ def generate_byte_array(dictionary, version, is_truncated, copyright):
             binary_data.append(0x00)
 
     # Add the copyright string if any
-    if copyright:
-        binary_data.extend(len(copyright).to_bytes(1, 'little'))
-        if len(copyright):
-            binary_data.extend([ord(elem) for elem in copyright])
-            binary_data.append(0x00)
+    if copyright and len(copyright):
+        binary_data.extend((len(copyright) + 1).to_bytes(1, 'little'))
+        binary_data.extend([ord(elem) for elem in copyright])
+        binary_data.append(0x00)
     else:
-        binary_data.extend([0x00, 0x00])
+        binary_data.append(0x00)  # set the copyright length to zero
 
     return binary_data
 
