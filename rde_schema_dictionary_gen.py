@@ -1136,7 +1136,7 @@ def dictionary_binary_size(dictionary, copyright):
         copyright_len = len(copyright) + 1  # for null termination
 
     return dictionary_binary_header_size() + len(dictionary) * dictionary_binary_entry_size() + \
-           total_field_string_size + 2 + copyright_len
+           total_field_string_size + 1 + copyright_len
 
 
 def binary_offset_from_dictionary_offset(offset):
@@ -1249,7 +1249,7 @@ def generate_byte_array(dictionary, version, is_truncated, copyright):
 
     # Add the copyright string if any
     if copyright:
-        binary_data.extend(len(copyright).to_bytes(2, 'little'))
+        binary_data.extend(len(copyright).to_bytes(1, 'little'))
         if len(copyright):
             binary_data.extend([ord(elem) for elem in copyright])
             binary_data.append(0x00)
