@@ -1133,11 +1133,10 @@ def dictionary_binary_size(dictionary, copyright):
                                    + 1  # for null termination
     copyright_len = 0
     if copyright:
-        copyright_len = len(copyright)
+        copyright_len = len(copyright) + 1  # for null termination
 
     return dictionary_binary_header_size() + len(dictionary) * dictionary_binary_entry_size() + \
            total_field_string_size + 2 + copyright_len
-
 
 
 def binary_offset_from_dictionary_offset(offset):

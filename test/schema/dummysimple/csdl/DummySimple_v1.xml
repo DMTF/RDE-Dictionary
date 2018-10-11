@@ -29,11 +29,11 @@
         <Annotation Term="OData.Description" String=""/>
         <Annotation Term="OData.LongDescription" String=""/>
         <Property Name="SampleIntegerProperty" Type="Edm.Int64">
-          <Annotation Term="OData.Permissions" EnumMember="OData.Permission/Read"/>
+          <Annotation Term="OData.Permissions" EnumMember="OData.Permission/ReadWrite"/>
           <Annotation Term="OData.Description" String=""/>
         </Property>
         <Property Name="SampleEnabledProperty" Type="Edm.Boolean">
-          <Annotation Term="OData.Permissions" EnumMember="OData.Permission/Read"/>
+          <Annotation Term="OData.Permissions" EnumMember="OData.Permission/ReadWrite"/>
           <Annotation Term="OData.Description" String=""/>
         </Property> 
         <Property Name="ChildArrayProperty" Type="Collection(DummySimple.v1_0_0.ChildEntity)">
@@ -69,7 +69,7 @@
           <Annotation Term="OData.Description" String=""/>
         </Property>
         <Property Name="AnotherBoolean" Type="Edm.Boolean">
-          <Annotation Term="OData.Permissions" EnumMember="OData.Permission/Read"/>
+          <Annotation Term="OData.Permissions" EnumMember="OData.Permission/ReadWrite"/>
           <Annotation Term="OData.Description" String=""/>
           <Annotation Term="OData.LongDescription" String=""/>
         </Property>
