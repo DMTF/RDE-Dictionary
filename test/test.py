@@ -1,12 +1,14 @@
 import json
 import os
 import re
+import io
 from collections import namedtuple
 import importlib
 import sys
 import argparse
 
 rde_lib_name = "rde_schema_dictionary_gen"
+bej_encode_decode_lib_name = "pldm_bej_encoder_decoder"
 
 TestSpecification = namedtuple('TestSpecification', 'csdl_directories '
                                                     'json_schema_directories '
@@ -17,7 +19,6 @@ TestSpecification = namedtuple('TestSpecification', 'csdl_directories '
                                                     'profile '
                                                     'dictionary_filename '
                                                     'input_encode_filename '
-                                                    'output_encoded_filename '
                                                     'copyright')
 MAJOR_SCHEMA_DICTIONARY_LIST = [
                                 TestSpecification(
@@ -30,7 +31,6 @@ MAJOR_SCHEMA_DICTIONARY_LIST = [
                                     '',
                                     'DummySimple.bin',
                                     'test/dummysimple.json',
-                                    'DummySimple_bej.bin',
                                     'Copyright (c) 2018 Acme Corp'),
 
                                 TestSpecification(
@@ -43,7 +43,6 @@ MAJOR_SCHEMA_DICTIONARY_LIST = [
                                     '',                # profile
                                     'drive.bin',
                                     'test/drive.json',      # file to encode
-                                    'drive_bej.bin',
                                     'Copyright (c) 2018 Acme Corp'),  # encoded bej file
 
                                 TestSpecification(
@@ -56,7 +55,6 @@ MAJOR_SCHEMA_DICTIONARY_LIST = [
                                     '',
                                     'storage.bin',
                                     'test/storage.json',
-                                    'storage_bej.bin',
                                     'Copyright (c) 2018 Acme Corp'),
 
                                 TestSpecification(
@@ -69,7 +67,6 @@ MAJOR_SCHEMA_DICTIONARY_LIST = [
                                     'test/example_profile_for_truncation.json',
                                     'storage.bin',
                                     'test/storage_profile_conformant.json',
-                                    'storage_bej.bin',
                                     'Copyright (c) 2018 Acme Corp')
                                 ]
 
@@ -85,6 +82,15 @@ if __name__ == '__main__':
         rde_dictionary_module = importlib.import_module(rde_lib_name)
     except Exception as ex:
         print("Error: Failed to import RDE dictionary builder library:", rde_lib_name)
+        print("Error: Exception type: {0}, message: {1}".format(ex.__class__.__name__, str(ex)))
+        sys.exit(1)
+
+    # Import the BEJ encoder/decoder script.
+    try:
+        sys.path.append('./')
+        bej_module = importlib.import_module(bej_encode_decode_lib_name)
+    except Exception as ex:
+        print("Error: Failed to import BEJ encoder/decoder library:", rde_lib_name)
         print("Error: Exception type: {0}, message: {1}".format(ex.__class__.__name__, str(ex)))
         sys.exit(1)
 
@@ -181,24 +187,29 @@ if __name__ == '__main__':
             exit(1)
 
         # Run the encode/decode
-        encode_cmd = 'python pldm_bej_encoder_decoder.py encode '\
-                     '--schemaDictionary ' + major_schema.dictionary_filename + \
-                     ' --annotationDictionary annotation.bin ' \
-                     ' --jsonFile ' + major_schema.input_encode_filename + \
-                     ' --bejOutputFile ' + major_schema.output_encoded_filename + \
-                     ' --pdrMapFile pdr.txt'
-        print(encode_cmd)
-        error_code = os.system(encode_cmd)
-        if error_code != 0:
-            exit(error_code)
+        bej_stream = io.BytesIO()
 
-        decode_cmd = 'python pldm_bej_encoder_decoder.py decode '\
-                     '--schemaDictionary ' + major_schema.dictionary_filename + \
-                     ' --annotationDictionary annotation.bin ' \
-                     ' --bejEncodedFile ' + major_schema.output_encoded_filename + \
-                     ' --pdrMapFile pdr.txt'
-        print(decode_cmd)
-        decode_file = os.popen(decode_cmd).read()
+        json_to_encode = json.load(open(major_schema.input_encode_filename))
+        encode_success = bej_module.bej_encode(
+                                        bej_stream,
+                                        json_to_encode,
+                                        schema_dictionary.dictionary_byte_array,
+                                        annotation_dictionary.dictionary_byte_array
+                                    )
+        assert encode_success,'Encode failure'
+        encoded_bytes = bej_stream.getvalue()
+        bej_module.print_hex(encoded_bytes)
+
+        decode_stream = io.StringIO()
+        decode_success = bej_module.bej_decode(
+                                        decode_stream,
+                                        io.BytesIO(bytes(encoded_bytes)),
+                                        schema_dictionary.dictionary_byte_array,
+                                        annotation_dictionary.dictionary_byte_array
+                                    )
+        assert decode_success,'Decode failure'
+
+        decode_file = decode_stream.getvalue()
 
         # compare the decode with the original
         print('Decoded JSON:')
@@ -206,8 +217,6 @@ if __name__ == '__main__':
         assert(json.loads(decode_file) == json.load(open(major_schema.input_encode_filename)))
 
         # cleanup
-        os.remove('pdr.txt')
-        os.remove(major_schema.output_encoded_filename)
         os.remove(major_schema.dictionary_filename)
 
     # cleanup
