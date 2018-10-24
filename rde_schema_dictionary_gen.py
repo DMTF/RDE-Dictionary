@@ -98,6 +98,9 @@ def strip_version(val):
 
 
 def get_primitive_type(property_type):
+    """
+    Returns the primitive type for a property or null if not primitive
+    """
     m = re.compile('Edm\.(.*)').match(property_type)
     if m:  # primitive type?
         primitive_type = m.group(1)
@@ -119,6 +122,9 @@ PROPERTY_EXPAND = 5
 
 
 def is_property_nullable(property):
+    """
+    Return True if the property is nullable, False otherwise
+    """
     property_is_nullable = True
     if property.get('Nullable') is not None:
         property_is_nullable = property.get('Nullable') == 'true'
@@ -126,6 +132,10 @@ def is_property_nullable(property):
 
 
 def get_property_permissions(property):
+    """
+    Returns whether the read-only versus read-write permissions for a property. If the permission is not set, 
+    then the permission is null.
+    """
     permissions = property.xpath('child::edm:Annotation[@Term=\'OData.Permissions\']', namespaces=ODATA_ALL_NAMESPACES)
     if len(permissions) == 1:
         return 'Permission=' + permissions[0].get('EnumMember')[len('OData.Permission/'):]
