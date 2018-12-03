@@ -6,6 +6,8 @@
 ## Pre Requisites:
 Minimum Python version: 3.6
 
+Conformance: PLDM for Redfish Device Enablement 0.9.0 draft 6
+
 The RDE dictionary builder is based on Python 3 and the client system is required to have the Python framework installed before the tool can be installed and executed on the system.  Additionally, the following packages are required to be installed and accessible from the python environment:
 * lxml
 * tabulate
@@ -17,24 +19,46 @@ To upgrade already installed packages, use the command:
 `pip install --upgrade <package name>`
 
 ## Usage 
+```
+usage: rde_schema_dictionary_gen.py [-h] [--verbose] [--silent]
+                                    {local,annotation_old,annotation,view} ...
 
-* `python rde_schema_dictionary_gen.py [-h] [--verbose] {local,annotation,view} ...`
-* `local options`:
+positional arguments:
+  {local,annotation_old,annotation,view}
 
-            rde_schema_dictionary_gen.py local [-h] --csdlSchemaDirectories
+optional arguments:
+  -h, --help            show this help message and exit
+  --verbose             increase output verbosity
+  --silent              no output prints unless errors
+```
+### Local Options
+```
+usage: rde_schema_dictionary_gen.py local [-h] -cd
                                           [CSDLSCHEMADIRECTORIES [CSDLSCHEMADIRECTORIES ...]]
-                                          --jsonSchemaDirectories
+                                          -jd
                                           [JSONSCHEMADIRECTORIES [JSONSCHEMADIRECTORIES ...]]
-                                          --schemaFilename SCHEMAFILENAME
-                                          --entity ENTITY
-                                          [--oemSchemaFilenames [OEMSCHEMAFILENAMES [OEMSCHEMAFILENAMES ...]]]
-                                          [--oemEntities [OEMENTITIES [OEMENTITIES ...]]]
-                                          [--profile PROFILE]
-                                          [--outputFile OUTPUTFILE]
-                                          [--outputJsonDictionaryFile OUTPUTJSONDICTIONARYFILE]
-                                          
-          
-## Example
+                                          -f SCHEMAFILENAME -e ENTITY
+                                          [-oemf [OEMSCHEMAFILENAMES [OEMSCHEMAFILENAMES ...]]]
+                                          [-oem [OEMENTITIES [OEMENTITIES ...]]]
+                                          [-cp COPYRIGHT] [-p PROFILE]
+                                          [-o OUTPUTFILE]
+                                          [-oj OUTPUTJSONDICTIONARYFILE]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -cd [CSDLSCHEMADIRECTORIES [CSDLSCHEMADIRECTORIES ...]], --csdlSchemaDirectories [CSDLSCHEMADIRECTORIES [CSDLSCHEMADIRECTORIES ...]]
+  -jd [JSONSCHEMADIRECTORIES [JSONSCHEMADIRECTORIES ...]], --jsonSchemaDirectories [JSONSCHEMADIRECTORIES [JSONSCHEMADIRECTORIES ...]]
+  -f SCHEMAFILENAME, --schemaFilename SCHEMAFILENAME
+  -e ENTITY, --entity ENTITY
+  -oemf [OEMSCHEMAFILENAMES [OEMSCHEMAFILENAMES ...]], --oemSchemaFilenames [OEMSCHEMAFILENAMES [OEMSCHEMAFILENAMES ...]]
+  -oem [OEMENTITIES [OEMENTITIES ...]], --oemEntities [OEMENTITIES [OEMENTITIES ...]]
+  -cp COPYRIGHT, --copyright COPYRIGHT
+  -p PROFILE, --profile PROFILE
+  -o OUTPUTFILE, --outputFile OUTPUTFILE
+  -oj OUTPUTJSONDICTIONARYFILE, --outputJsonDictionaryFile OUTPUTJSONDICTIONARYFILE
+```
+  
+### Example
 ```
 python rde_schema_dictionary_gen.py local --csdlSchemaDirectories test/schema/metadata  test/schema/oem-csdl --jsonSchemaDirectories test/schema/json-schema --schemaFilename Drive_v1.xml --entity Drive.Drive --outputFile drive.bin
 

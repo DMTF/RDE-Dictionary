@@ -24,6 +24,7 @@ from collections import namedtuple
 from copy import deepcopy
 import binascii
 import glob
+import collections
 
 # OData types
 ODATA_ENUM_TYPE = '{http://docs.oasis-open.org/odata/ns/edm}EnumType'
@@ -261,6 +262,13 @@ def add_annotation_terms(doc, entity_repo):
 
 
 def add_entity_and_complex_types(doc, entity_repo):
+    """
+    Adds all entity and complex types into the entity repo for the specified document
+
+    Args:
+        doc:  The document to search for enums
+        entity_repo: Found enums will be added to the entity_repo
+    """
     for entity_type in doc.xpath('//edm:EntityType | //edm:ComplexType', namespaces=ODATA_ALL_NAMESPACES):
         properties = []
         if is_abstract(entity_type) is not True:
@@ -282,14 +290,48 @@ def add_entity_and_complex_types(doc, entity_repo):
                      if item not in entity_repo[entity_type_name][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]]
                 )
 
+
+def add_enums(doc, entity_repo):
+    """
+    Adds all enum types into the entity repo for the specified document
+
+    Args:
+        doc:  The document to search for enums
+        entity_repo: Found enums will be added to the entity_repo
+    """
     for enum_type in doc.xpath('//edm:EnumType', namespaces=ODATA_ALL_NAMESPACES):
         enum_type_name = get_qualified_entity_name(enum_type)
         if enum_type_name not in entity_repo:
             entity_repo[enum_type_name] = ('Enum', [])
-        entity_repo[enum_type_name][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].extend(
-            [[enum] for enum in enum_type.xpath('child::edm:Member/@Name', namespaces=ODATA_ALL_NAMESPACES)
-             if [enum] not in entity_repo[enum_type_name][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]]
-        )
+
+        enum_dict = {}
+        for enum_member in enum_type.xpath('child::edm:Member', namespaces=ODATA_ALL_NAMESPACES):
+            ver = ''
+            # check for Redfish.Revision
+            revisions = enum_member.xpath(
+                'child::edm:Annotation[@Term=\'Redfish.Revisions\']/edm:Collection/edm:Record',
+                namespaces=ODATA_ALL_NAMESPACES)
+
+            if len(revisions) == 1:
+                props = revisions[0].xpath('child::edm:PropertyValue[@Property=\"Kind\"]',
+                                   namespaces=ODATA_ALL_NAMESPACES)
+                if len(props) == 1 and props[0].get('EnumMember') == 'Redfish.RevisionKind/Added':
+                    ver = revisions[0].xpath('child::edm:PropertyValue[@Property=\'Version\']',
+                                   namespaces=ODATA_ALL_NAMESPACES)[0].get('String')
+
+            if ver not in enum_dict:
+                enum_dict[ver] = []
+            enum_dict[ver].append(enum_member.get('Name'))
+
+        # sort the keys (the keys are the version strings).
+        sorted_enum_dict = collections.OrderedDict(sorted(enum_dict.items()))
+
+        # Add the sorted enum values to the entity repo
+        for e in sorted_enum_dict:
+            # alphabetically sort all the values as case insensitive
+            sorted_enum_dict[e] = sorted(sorted_enum_dict[e], key=lambda s: s.casefold())
+            for item in sorted_enum_dict[e]:
+                entity_repo[enum_type_name][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].append([item])
 
 
 def add_actions(doc, entity_repo):
@@ -482,66 +524,15 @@ def get_latest_version_as_ver32(entity):
     return to_ver32(version)
 
 
-def find_enum(key, dictionary):
-    for k, v in dictionary.items():
-        if k == key and "enum" in v:
-            return v
-        elif isinstance(v, dict):
-            f = find_enum(key, v)
-            if f is not None and "enum" in f:
-                return f
-    return None
-
-
-def fix_enums(json_schema_dirs, entity_repo, key):
-    global verbose
-
-    if entity_repo[key][ENTITY_REPO_TUPLE_TYPE_INDEX] == 'Enum':
-        # build a list of json schema files that need to be scanned for the enum in question
-        [base_filename, enum_name] = key.split('.')
-        if verbose:
-            print("Need to look at json schema to fix enums for", key, base_filename)
-        enum_values = []
-        for json_schema_dir in json_schema_dirs:
-            for file in os.listdir(json_schema_dir):
-                if file.startswith(base_filename + '.'):
-                    json_schema = json.load(open(os.path.join(json_schema_dir, file)))
-                    # search json schema for enum
-
-                    if verbose:
-                        print("Looking for", enum_name, "in", os.path.join(json_schema_dir, file))
-                    json_enum = find_enum(enum_name, json_schema)
-                    if json_enum is not None:
-                        if verbose:
-                            print(json_enum["enum"])
-                        new_enums = list((Counter(json_enum["enum"]) - Counter(enum_values)).elements())
-                        new_enums.sort()
-                        enum_values = enum_values + new_enums
-                        if verbose:
-                            print(enum_values)
-
-        if len(enum_values):
-            # entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX] = [[enum] for enum in enum_values]
-            del entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX][:]
-            entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].extend([[enum] for enum in enum_values])
-
-
-def add_all_entity_and_complex_types(json_schema_dirs, source_type, doc_list, entity_repo):
+def add_all_entity_and_complex_types(doc_list, entity_repo):
     for key in doc_list:
         add_entity_and_complex_types(doc_list[key], entity_repo)
+        add_enums(doc_list[key], entity_repo)
         add_actions(doc_list[key], entity_repo)
         add_annotation_terms(doc_list[key], entity_repo)
 
-    # add special ones for AutoExpandRefs
-    # entity_repo['AutoExpandRef'] = ('Set', [['@odata.id', 'String', '']])
-    # entity_repo['AutoExpandRef'] = ('Set', [['', 'Set', '']])
-
     # second pass, add seq numbers
     for key in entity_repo:
-        # TODO: Fix enums (works only for local mode currently)
-        if source_type == 'local' and entity_repo[key][ENTITY_REPO_TUPLE_TYPE_INDEX] == 'Enum':
-            fix_enums(json_schema_dirs, entity_repo, key)
-
         for seq, item in enumerate(entity_repo[key][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
             item.insert(0, seq)
 
@@ -1385,7 +1376,7 @@ def generate_annotation_schema_dictionary(source_type, csdl_schema_dirs, json_sc
     if verbose:
         pprint.PrettyPrinter(indent=3).pprint(doc_list)
 
-    add_all_entity_and_complex_types(json_schema_dirs, source_type, doc_list, entity_repo)
+    add_all_entity_and_complex_types(doc_list, entity_repo)
     if verbose:
         pprint.PrettyPrinter(indent=3).pprint(entity_repo)
 
@@ -1497,7 +1488,7 @@ def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
     if verbose:
         pprint.PrettyPrinter(indent=3).pprint(doc_list)
 
-    add_all_entity_and_complex_types(json_schema_dirs, source_type, doc_list, entity_repo)
+    add_all_entity_and_complex_types(doc_list, entity_repo)
     if verbose:
         pprint.PrettyPrinter(indent=3).pprint(entity_repo)
 
