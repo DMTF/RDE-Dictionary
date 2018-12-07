@@ -34,6 +34,18 @@ MAJOR_SCHEMA_DICTIONARY_LIST = [
                                     'Copyright (c) 2018 Acme Corp'),
 
                                 TestSpecification(
+                                    'test/schema/dummysimple/csdl',
+                                    'test/schema/dummysimple/json-schema',
+                                    'DummySimple_v1.xml',
+                                    'DummySimple.DummySimple',
+                                    '',
+                                    '',
+                                    '',
+                                    'DummySimple.bin',
+                                    'test/dummysimple2.json',
+                                    'Copyright (c) 2018 Acme Corp'),
+
+                                TestSpecification(
                                     'test/schema/metadata test/schema/oem-csdl',
                                     'test/schema/json-schema',
                                     'Drive_v1.xml',

@@ -1,0 +1,14 @@
+{
+    "Id": "Dummy ID",
+    "SampleIntegerProperty": -5,
+    "SampleEnabledProperty": false,
+    "ChildArrayProperty": [
+        {
+            "AnotherBoolean": true,
+            "LinkStatus": "NoLink"
+        }, 
+        {
+            "LinkStatus": "LinkDown"
+        }
+    ]
+}

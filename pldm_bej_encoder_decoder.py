@@ -86,10 +86,16 @@ def find_num_bytes_and_msb(value):
         return 1, 0xff
 
     # use a big endian byte array (MSB is at index 0) as it is easier to eliminate the padding
-    value_byte_array = twos_complement(value, 64).to_bytes(NUM_BYTES_FOR_INTEGER, 'big')
-    for index, val in enumerate(value_byte_array):
-        if (value > 0 and val != 0x00) or (value < -1 and val != 0xff):
-            return NUM_BYTES_FOR_INTEGER - index, val
+    if value > 0:
+        value_byte_array = twos_complement(value, 64).to_bytes(NUM_BYTES_FOR_INTEGER, 'big')
+        for index, val in enumerate(value_byte_array):
+            if val != 0x00:
+                return NUM_BYTES_FOR_INTEGER - index, val
+    else:
+        value_byte_array = twos_complement(value, 64).to_bytes(NUM_BYTES_FOR_INTEGER, 'little')
+        for index, val in enumerate(value_byte_array):
+            if val & 0x80:
+                return index+1, val
 
 
 def num_bytes_for_unsigned_integer(value):
