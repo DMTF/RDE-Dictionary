@@ -110,6 +110,8 @@ def get_primitive_type(property_type):
         if ((primitive_type == "SByte") or (primitive_type == "Int16") or (primitive_type == "Int32") or
                 (primitive_type == "Int64") or (primitive_type == "Decimal")):
             primitive_type = 'Integer'
+        if primitive_type == "PrimitiveType":
+            primitive_type = 'Choice'
         return primitive_type
     return ''
 
@@ -417,18 +419,21 @@ def find_json_schema_files_with_version(json_schema_dirs, filename):
     return filenames
 
 
-def add_namespaces(csdl_schema_dirs, source_type, source, doc_list):
+def add_namespaces(csdl_schema_dirs, source, doc_list):
     global includeNamespaces
     global verbose
 
+    # check to see if source is from a remote location
+    is_remote = re.search("^http(s?)://", source) is not None
+
     doc_name = source
     schema_string = ''
-    if source_type == 'remote':
+    if is_remote:
         doc_name = extract_doc_name_from_url(source)
 
     # first load the CSDL file as a string
     if doc_name not in doc_list:
-        if source_type == 'remote':
+        if is_remote:
             # ignore odata references
             if source.find('http://docs.oasis') == -1:
                 try:
@@ -454,7 +459,7 @@ def add_namespaces(csdl_schema_dirs, source_type, source, doc_list):
 
         # bring in all dependent documents and their corresponding namespaces
         for ref in doc.xpath('descendant-or-self::edmx:Reference', namespaces=ODATA_ALL_NAMESPACES):
-            if source_type == 'remote':
+            if is_remote:
                 dependent_source = ref.get('Uri')
             else:
                 dependent_source = find_csdl_source(csdl_schema_dirs, extract_doc_name_from_url(ref.get('Uri')))
@@ -463,7 +468,7 @@ def add_namespaces(csdl_schema_dirs, source_type, source, doc_list):
                     continue
                 if verbose:
                     print(dependent_source)
-            add_namespaces(csdl_schema_dirs, source_type, dependent_source, doc_list)
+            add_namespaces(csdl_schema_dirs, dependent_source, doc_list)
 
 
 def get_latest_version(entity):
@@ -990,35 +995,6 @@ def generate_annotation_dictionary(annotation_version, json_schema_dirs, entity_
     return annotation_dictionary
 
 
-def generate_annotation_dictionary_old(json_schema_dirs, entity_repo, entity_offset_map):
-    annotation_dictionary = []
-
-    # first 4 entries
-    odata_row_index = 1
-    message_row_index = 2
-    redfish_row_index = 3
-    add_dictionary_row(annotation_dictionary, 0, 0, "Set", '', "annotation", 4, 1)
-    add_dictionary_row(annotation_dictionary, odata_row_index, 0, "Set", '', "odata", 0, 5)
-    add_dictionary_row(annotation_dictionary, message_row_index, 0, "Set", '', "Message", 0, 'Message')
-    add_dictionary_row(annotation_dictionary, redfish_row_index, 0, "Set", '', "Redfish", 0, 'Redfish')
-    add_dictionary_row(annotation_dictionary, 4, 0, "Set", '', "reserved", 0, '')
-
-    odata_annotation_location = find_json_schema_source(json_schema_dirs, 'odata.v4_0_2.json')
-    annotation_dictionary[1][DICTIONARY_ENTRY_CHILD_COUNT] = \
-        add_odata_annotations(annotation_dictionary, odata_annotation_location)
-
-    annotation_dictionary = generate_dictionary(annotation_dictionary, entity_repo, entity_offset_map, False)
-
-    # In order to present annotations as a flat namespace, sequence numbers for elements from the
-    # odata, Message and Redfish schema shall have their two low-order bits set to 00b, 01b and 10b
-    # respectively
-    fix_annotations_sequence_numbers(annotation_dictionary, odata_row_index,   0)
-    fix_annotations_sequence_numbers(annotation_dictionary, message_row_index, 1)
-    fix_annotations_sequence_numbers(annotation_dictionary, redfish_row_index, 2)
-
-    return annotation_dictionary
-
-
 def truncate_entity_repo(entity_repo, entity, required_properties, is_truncated, enum_key = ""):
     """Truncate the entity repository baseed on the required_properties dictionary."""
     if entity in entity_repo:
@@ -1152,13 +1128,14 @@ def dictionary_offset_from_binary_offset(offset):
 
 
 bej_format_table = {
-    'Set':          0x00,
-    'Array':        0x01,
-    'Integer':      0x03,
-    'Enum':         0x04,
-    'String':       0x05,
-    'Boolean':      0x07,
-    'ResourceLink': 0x0E
+    'Set':           0x00,
+    'Array':         0x01,
+    'Integer':       0x03,
+    'Enum':          0x04,
+    'String':        0x05,
+    'Boolean':       0x07,
+    'Choice':        0x09,  # bejChoice
+    'ResourceLink':  0x0E
 }
 
 
@@ -1326,12 +1303,10 @@ def print_binary_dictionary(byte_array):
 SchemaDictionary = namedtuple('SchemaDictionary', 'dictionary dictionary_byte_array json_dictionary')
 
 
-def generate_annotation_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
-                                          version=None, copyright=None):
+def generate_annotation_schema_dictionary(csdl_schema_dirs, json_schema_dirs, version=None, copyright=None):
     """ Generate the annotation schema dictionary.
 
     Args:
-        source_type: Type of schema file. annotation or annotation_old.
         csdl_schema_dirs: List of CSDL schema directories.
         json_schema_dirs: List of JSON schema directories.
         version: The version of the annotation in Redfish format (e.g. v1_0_0) (default None).
@@ -1351,15 +1326,8 @@ def generate_annotation_schema_dictionary(source_type, csdl_schema_dirs, json_sc
     entity_offset_map = {}
     includeNamespaces = {}
 
-    # Validate source type.
-    if source_type not in ['annotation', 'annotation_old']:
-        if verbose:
-            print('Error, invalid source_type: {0}'.format(source_type))
-        return (SchemaDictionary(dictionary=None,
-                                 dictionary_byte_array=None,
-                                 json_dictionary=None))
-
     # Set the schema file name and entity for annotations.
+    # TODO: Does not work with remote locations
     schema_file_name = 'RedfishExtensions_v1.xml'
     entity = 'RedfishExtensions.PropertyPattern'
 
@@ -1371,7 +1339,7 @@ def generate_annotation_schema_dictionary(source_type, csdl_schema_dirs, json_sc
             break
 
     # Add namespaces.
-    add_namespaces(csdl_schema_dirs, source_type, source, doc_list)
+    add_namespaces(csdl_schema_dirs, source, doc_list)
 
     if verbose:
         pprint.PrettyPrinter(indent=3).pprint(doc_list)
@@ -1383,14 +1351,8 @@ def generate_annotation_schema_dictionary(source_type, csdl_schema_dirs, json_sc
     # search for entity and build dictionary
     if entity in entity_repo:
         ver = ''
-        dictionary = []
-        if source_type == 'annotation_old':
-            dictionary = generate_annotation_dictionary_old(json_schema_dirs, entity_repo, entity_offset_map)
-            ver = 0xF1F0F000  # TODO: fix version for annotation dictionary (maybe add cmd line param)
-
-        if source_type == 'annotation':
-            dictionary = generate_annotation_dictionary(version, json_schema_dirs, entity_repo, entity_offset_map)
-            ver = to_ver32(version)
+        dictionary = generate_annotation_dictionary(version, json_schema_dirs, entity_repo, entity_offset_map)
+        ver = to_ver32(version)
 
         # Generate dictionary_byte_array.
         dictionary_byte_array = generate_byte_array(dictionary, ver, False, copyright)
@@ -1481,9 +1443,9 @@ def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
                [oemName, 'Set', '', oem_entity])
 
     # Add namespaces.
-    add_namespaces(csdl_schema_dirs, source_type, source, doc_list)
+    add_namespaces(csdl_schema_dirs, source, doc_list)
     for oemSource in oem_sources:
-        add_namespaces(csdl_schema_dirs, source_type, oemSource, doc_list)
+        add_namespaces(csdl_schema_dirs, oemSource, doc_list)
 
     if verbose:
         pprint.PrettyPrinter(indent=3).pprint(doc_list)
@@ -1567,12 +1529,6 @@ if __name__ == '__main__':
     local_parser.add_argument('-o', '--outputFile', type=argparse.FileType('wb'), required=False)
     local_parser.add_argument('-oj', '--outputJsonDictionaryFile', type=argparse.FileType('w'), required=False)
 
-    annotation_parser = subparsers.add_parser('annotation_old')
-    annotation_parser.add_argument('-cd', '--csdlSchemaDirectories', nargs='*', type=str, required=True)
-    annotation_parser.add_argument('-jd', '--jsonSchemaDirectories', nargs='*', type=str, required=True)
-    annotation_parser.add_argument('-o', '--outputFile', type=argparse.FileType('wb'), required=False)
-    annotation_parser.add_argument('-oj', '--outputJsonDictionaryFile', type=argparse.FileType('w'), required=False)
-
     annotation_v2_parser = subparsers.add_parser('annotation')
     annotation_v2_parser.add_argument('-cd', '--csdlSchemaDirectories', nargs='*', type=str, required=True)
     annotation_v2_parser.add_argument('-jd', '--jsonSchemaDirectories', nargs='*', type=str, required=True)
@@ -1616,11 +1572,6 @@ if __name__ == '__main__':
     elif args.source == 'remote':
         schema_dictionary = generate_schema_dictionary(args.source, None, None, args.entity, None,
                                                        None, None, None, args.schemaURL)
-    elif args.source == 'annotation_old':
-        # Just choose a dummy complex entity type to start the annotation dictionary generation process.
-        schema_dictionary = generate_annotation_schema_dictionary(args.source, args.csdlSchemaDirectories,
-                                                                  args.jsonSchemaDirectories, None)
-
     elif args.source == 'annotation':
         # Just choose a dummy complex entity type to start the annotation dictionary generation process.
         schema_dictionary = generate_annotation_schema_dictionary(args.source, args.csdlSchemaDirectories,

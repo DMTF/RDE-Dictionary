@@ -11,6 +11,7 @@ Conformance: PLDM for Redfish Device Enablement 0.9.0 draft 6
 The RDE dictionary builder is based on Python 3 and the client system is required to have the Python framework installed before the tool can be installed and executed on the system.  Additionally, the following packages are required to be installed and accessible from the python environment:
 * lxml
 * tabulate
+* gitpython
 
 To install the required packages, use the command:
 `pip install <package name>`
@@ -21,10 +22,10 @@ To upgrade already installed packages, use the command:
 ## Usage 
 ```
 usage: rde_schema_dictionary_gen.py [-h] [--verbose] [--silent]
-                                    {local,annotation_old,annotation,view} ...
+                                    {local,annotation,view} ...
 
 positional arguments:
-  {local,annotation_old,annotation,view}
+  {local,annotation,view}
 
 optional arguments:
   -h, --help            show this help message and exit
