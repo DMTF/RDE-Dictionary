@@ -1518,24 +1518,24 @@ if __name__ == '__main__':
     # remote_parser.add_argument('--outputFile', type=str, required=False)
 
     local_parser = subparsers.add_parser('local')
-    local_parser.add_argument('-cd', '--csdlSchemaDirectories', nargs='*', type=str, required=True)
-    local_parser.add_argument('-jd', '--jsonSchemaDirectories', nargs='*', type=str, required=True)
-    local_parser.add_argument('-f', '--schemaFilename', type=str, required=True)
+    local_parser.add_argument('-c', '--csdlSchemaDirectories', nargs='*', type=str, required=True)
+    local_parser.add_argument('-j', '--jsonSchemaDirectories', nargs='*', type=str, required=True)
+    local_parser.add_argument('-s', '--schemaFilename', type=str, required=True)
     local_parser.add_argument('-e', '--entity', type=str, required=True)
-    local_parser.add_argument('-oemf', '--oemSchemaFilenames', nargs='*', type=str, required=False)
-    local_parser.add_argument('-oem', '--oemEntities', nargs='*', type=str, required=False)
-    local_parser.add_argument('-cp', '--copyright', type=str, required=False)
+    local_parser.add_argument('-o', '--oemSchemaFilenames', nargs='*', type=str, required=False)
+    local_parser.add_argument('-t', '--oemEntities', nargs='*', type=str, required=False)
+    local_parser.add_argument('-r', '--copyright', type=str, required=False)
     local_parser.add_argument('-p', '--profile', type=str, required=False)
-    local_parser.add_argument('-o', '--outputFile', type=argparse.FileType('wb'), required=False)
-    local_parser.add_argument('-oj', '--outputJsonDictionaryFile', type=argparse.FileType('w'), required=False)
+    local_parser.add_argument('-d', '--outputFile', type=argparse.FileType('wb'), required=False)
+    local_parser.add_argument('-f', '--outputJsonDictionaryFile', type=argparse.FileType('w'), required=False)
 
     annotation_v2_parser = subparsers.add_parser('annotation')
-    annotation_v2_parser.add_argument('-cd', '--csdlSchemaDirectories', nargs='*', type=str, required=True)
-    annotation_v2_parser.add_argument('-jd', '--jsonSchemaDirectories', nargs='*', type=str, required=True)
+    annotation_v2_parser.add_argument('-c', '--csdlSchemaDirectories', nargs='*', type=str, required=True)
+    annotation_v2_parser.add_argument('-j', '--jsonSchemaDirectories', nargs='*', type=str, required=True)
     annotation_v2_parser.add_argument('-v', '--version', type=str, required=True)
-    annotation_v2_parser.add_argument('-cp', '--copyright', type=str, required=False)
-    annotation_v2_parser.add_argument('-o', '--outputFile', type=argparse.FileType('wb'), required=False)
-    annotation_v2_parser.add_argument('-oj', '--outputJsonDictionaryFile', type=argparse.FileType('w'), required=False)
+    annotation_v2_parser.add_argument('-r', '--copyright', type=str, required=False)
+    annotation_v2_parser.add_argument('-d', '--outputFile', type=argparse.FileType('wb'), required=False)
+    annotation_v2_parser.add_argument('-f', '--outputJsonDictionaryFile', type=argparse.FileType('w'), required=False)
 
     dictionary_dump = subparsers.add_parser('view')
     dictionary_dump.add_argument('-f', '--file', type=str, required=True)
@@ -1574,7 +1574,7 @@ if __name__ == '__main__':
                                                        None, None, None, args.schemaURL)
     elif args.source == 'annotation':
         # Just choose a dummy complex entity type to start the annotation dictionary generation process.
-        schema_dictionary = generate_annotation_schema_dictionary(args.source, args.csdlSchemaDirectories,
+        schema_dictionary = generate_annotation_schema_dictionary(args.csdlSchemaDirectories,
                                                                   args.jsonSchemaDirectories, args.version,
                                                                   args.copyright)
 
