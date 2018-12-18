@@ -34,29 +34,29 @@ optional arguments:
 ```
 ### Local Options
 ```
-usage: rde_schema_dictionary_gen.py local [-h] -cd
+usage: rde_schema_dictionary_gen.py local [-h] -c
                                           [CSDLSCHEMADIRECTORIES [CSDLSCHEMADIRECTORIES ...]]
-                                          -jd
+                                          -j
                                           [JSONSCHEMADIRECTORIES [JSONSCHEMADIRECTORIES ...]]
-                                          -f SCHEMAFILENAME -e ENTITY
-                                          [-oemf [OEMSCHEMAFILENAMES [OEMSCHEMAFILENAMES ...]]]
-                                          [-oem [OEMENTITIES [OEMENTITIES ...]]]
-                                          [-cp COPYRIGHT] [-p PROFILE]
-                                          [-o OUTPUTFILE]
-                                          [-oj OUTPUTJSONDICTIONARYFILE]
+                                          -s SCHEMAFILENAME -e ENTITY
+                                          [-o [OEMSCHEMAFILENAMES [OEMSCHEMAFILENAMES ...]]]
+                                          [-t [OEMENTITIES [OEMENTITIES ...]]]
+                                          [-r COPYRIGHT] [-p PROFILE]
+                                          [-d OUTPUTFILE]
+                                          [-f OUTPUTJSONDICTIONARYFILE]
 
 optional arguments:
   -h, --help            show this help message and exit
-  -cd [CSDLSCHEMADIRECTORIES [CSDLSCHEMADIRECTORIES ...]], --csdlSchemaDirectories [CSDLSCHEMADIRECTORIES [CSDLSCHEMADIRECTORIES ...]]
-  -jd [JSONSCHEMADIRECTORIES [JSONSCHEMADIRECTORIES ...]], --jsonSchemaDirectories [JSONSCHEMADIRECTORIES [JSONSCHEMADIRECTORIES ...]]
-  -f SCHEMAFILENAME, --schemaFilename SCHEMAFILENAME
+  -c [CSDLSCHEMADIRECTORIES [CSDLSCHEMADIRECTORIES ...]], --csdlSchemaDirectories [CSDLSCHEMADIRECTORIES [CSDLSCHEMADIRECTORIES ...]]
+  -j [JSONSCHEMADIRECTORIES [JSONSCHEMADIRECTORIES ...]], --jsonSchemaDirectories [JSONSCHEMADIRECTORIES [JSONSCHEMADIRECTORIES ...]]
+  -s SCHEMAFILENAME, --schemaFilename SCHEMAFILENAME
   -e ENTITY, --entity ENTITY
-  -oemf [OEMSCHEMAFILENAMES [OEMSCHEMAFILENAMES ...]], --oemSchemaFilenames [OEMSCHEMAFILENAMES [OEMSCHEMAFILENAMES ...]]
-  -oem [OEMENTITIES [OEMENTITIES ...]], --oemEntities [OEMENTITIES [OEMENTITIES ...]]
-  -cp COPYRIGHT, --copyright COPYRIGHT
+  -o [OEMSCHEMAFILENAMES [OEMSCHEMAFILENAMES ...]], --oemSchemaFilenames [OEMSCHEMAFILENAMES [OEMSCHEMAFILENAMES ...]]
+  -t [OEMENTITIES [OEMENTITIES ...]], --oemEntities [OEMENTITIES [OEMENTITIES ...]]
+  -r COPYRIGHT, --copyright COPYRIGHT
   -p PROFILE, --profile PROFILE
-  -o OUTPUTFILE, --outputFile OUTPUTFILE
-  -oj OUTPUTJSONDICTIONARYFILE, --outputJsonDictionaryFile OUTPUTJSONDICTIONARYFILE
+  -d OUTPUTFILE, --outputFile OUTPUTFILE
+  -f OUTPUTJSONDICTIONARYFILE, --outputJsonDictionaryFile OUTPUTJSONDICTIONARYFILE
 ```
   
 ### Example
