@@ -292,7 +292,7 @@ if __name__ == '__main__':
         bej_stream = io.BytesIO()
 
         json_to_encode = json.load(open(major_schema.input_encode_filename))
-        encode_success = bej_module.bej_encode(
+        encode_success, pdr_map = bej_module.bej_encode(
                                         bej_stream,
                                         json_to_encode,
                                         schema_dictionary.dictionary_byte_array,
@@ -307,7 +307,7 @@ if __name__ == '__main__':
                                         decode_stream,
                                         io.BytesIO(bytes(encoded_bytes)),
                                         schema_dictionary.dictionary_byte_array,
-                                        annotation_dictionary.dictionary_byte_array
+                                        annotation_dictionary.dictionary_byte_array, pdr_map, {}
                                     )
         assert decode_success,'Decode failure'
 

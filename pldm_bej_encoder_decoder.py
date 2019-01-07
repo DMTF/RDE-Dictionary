@@ -274,6 +274,10 @@ def bej_unpack_sflv_resource_link(stream):
     return bej_decode_sequence_number(seq), value
 
 
+def bej_unpack_sflv_null(stream):
+    seq, format, length = bej_unpack_sfl(stream)
+    return bej_decode_sequence_number(seq)
+
 # Globals for bej set - Warning! not thread safe
 bej_set_stream_stack = []
 
@@ -345,7 +349,7 @@ def bej_pack_property_annotation_done(stream, annotation_seq):
 def bej_unpack_set_start(stream):
     '''
     :param stream:
-    :return: sequence_num, count
+    :return: [sequence_num, selector], length, count
     '''
 
     # move the stream to point to the first element in the set
@@ -354,13 +358,13 @@ def bej_unpack_set_start(stream):
     # unpack the count
     count = bej_unpack_nnint(stream)
 
-    return bej_decode_sequence_number(seq), count
+    return bej_decode_sequence_number(seq), length, count
 
 
 def bej_unpack_array_start(stream):
     '''
     :param stream:
-    :return: sequence_num, count
+    :return: [sequence_num, selector], length, count
     '''
 
     # move the stream to point to the first element in the array
@@ -369,7 +373,7 @@ def bej_unpack_array_start(stream):
     # unpack the count
     count = bej_unpack_nnint(stream)
 
-    return bej_decode_sequence_number(seq), count
+    return bej_decode_sequence_number(seq), length, count
 
 
 def bej_unpack_property_annotation_start(stream):
@@ -472,6 +476,18 @@ def bej_typeof(stream):
     return format
 
 
+def bej_is_deferred_binding(stream):
+    current_pos = stream.tell()
+
+    # skip seq
+    bej_unpack_nnint(stream)
+
+    is_deferred_binding = int.from_bytes(stream.read(1), 'little') & 0x01 == 0x01
+    stream.seek(current_pos, os.SEEK_SET)
+
+    return is_deferred_binding
+
+
 def bej_sequenceof(stream):
     current_pos = stream.tell()
 
@@ -496,7 +512,7 @@ current_available_pdr = 0
 
 
 def get_link_from_pdr_map(pdr):
-    for value, key in enumerate(resource_link_to_pdr_map):
+    for key, value in resource_link_to_pdr_map.items():
         if value == pdr:
             return key
     return ''
@@ -706,7 +722,7 @@ def bej_encode(output_stream, json_data, schema_dict, annot_dict):
                                 entry[DICTIONARY_ENTRY_CHILD_COUNT])
     if success:
         bej_pack_set_done(new_stream, 0)
-    return success
+    return success, resource_link_to_pdr_map
 
 
 def get_seq_and_dictionary_selector(seq):
@@ -760,14 +776,26 @@ def get_annotation_dictionary_entries_by_seq(annotation_dictionary):
                                               base_entry[DICTIONARY_ENTRY_CHILD_COUNT])
 
 
-def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entries_by_seq, prop_count, is_seq_array_index, add_name=True):
+def validate_complex_type_length(input_stream, complex_type_start_pos, length):
+    current_pos = input_stream.tell()
+    input_stream.seek(complex_type_start_pos, os.SEEK_SET)
+    bej_unpack_sfl(input_stream)
+    set_value_start_pos = input_stream.tell()
+    input_stream.seek(current_pos, os.SEEK_SET)
+    return current_pos - set_value_start_pos == length
+
+
+def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entries_by_seq, prop_count,
+                      is_seq_array_index, add_name, deferred_binding_strings):
     index = 0
     success = True
     while success and input_stream.tell() < get_stream_size(input_stream) and index < prop_count:
         format = bej_typeof(input_stream)
 
         if format == BEJ_FORMAT_SET:
-            [seq, selector], count = bej_unpack_set_start(input_stream)
+            # record the stream pos so we can validate the length later
+            set_start_pos = input_stream.tell()
+            [seq, selector], length, count = bej_unpack_set_start(input_stream)
             if is_seq_array_index:
                 seq = 0
             entry = entries_by_seq[seq]
@@ -781,13 +809,26 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
             success = bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict,
                                         load_dictionary_subset_by_key_sequence(
                                             dict_to_use, entry[DICTIONARY_ENTRY_OFFSET], entry[DICTIONARY_ENTRY_CHILD_COUNT]),
-                                        prop_count=count, is_seq_array_index=False)
+                                        count, is_seq_array_index=False, add_name=True, deferred_binding_strings=deferred_binding_strings)
             output_stream.write('}')
 
+            # validate the length
+            if not validate_complex_type_length(input_stream, set_start_pos, length):
+                print('BEJ decoding error: Invalid length/count for set. Current stream contents:',
+                      output_stream.getvalue())
+                return False
+
         elif format == BEJ_FORMAT_STRING:
+            is_deferred_binding = bej_is_deferred_binding(input_stream)
             [seq, selector], value = bej_unpack_sflv_string(input_stream)
             if add_name:
                 bej_decode_name(annot_dict, seq, selector, entries_by_seq, output_stream)
+
+            if is_deferred_binding:
+                bindings_to_resolve = re.findall('%.*?%', value)
+                for binding in bindings_to_resolve:
+                    if binding in deferred_binding_strings:
+                        value = value.replace(binding, deferred_binding_strings[binding])
 
             output_stream.write('"' + value + '"')
 
@@ -823,8 +864,16 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
             enum_value = bej_decode_enum_value(schema_dict, entries_by_seq[seq], value)
             output_stream.write('"' + enum_value + '"')
 
+        elif format == BEJ_FORMAT_NULL:
+            [seq, selector] = bej_unpack_sflv_null(input_stream)
+            if add_name:
+                bej_decode_name(annot_dict, seq, selector, entries_by_seq, output_stream)
+
+            output_stream.write('null')
+
         elif format == BEJ_FORMAT_ARRAY:
-            [seq, selector], array_member_count = bej_unpack_array_start(input_stream)
+            array_start_pos = input_stream.tell()
+            [seq, selector], length, array_member_count = bej_unpack_array_start(input_stream)
             if is_seq_array_index:
                 seq = 0
 
@@ -839,11 +888,19 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
                 success = bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict,
                                             load_dictionary_subset_by_key_sequence(dict_to_use, entry[DICTIONARY_ENTRY_OFFSET],
                                                                                    entry[DICTIONARY_ENTRY_CHILD_COUNT]),
-                                            prop_count=1, is_seq_array_index=True, add_name=False)
+                                            prop_count=1, is_seq_array_index=True, add_name=False,
+                                            deferred_binding_strings=deferred_binding_strings)
                 if i < array_member_count-1:
                     output_stream.write(',')
 
             output_stream.write(']')
+
+            # validate the length
+            if not validate_complex_type_length(input_stream, array_start_pos, length):
+                print('BEJ decoding error: Invalid length/count for array. Current stream contents:',
+                      output_stream.getvalue())
+                return False
+
 
         elif format == BEJ_FORMAT_PROPERTY_ANNOTATION:
             # Seq(property sequence #)
@@ -861,7 +918,8 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
 
             success = bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict,
                                         get_annotation_dictionary_entries_by_seq(annot_dict),
-                                        prop_count=1, is_seq_array_index=False, add_name=False)
+                                        prop_count=1, is_seq_array_index=False, add_name=False,
+                                        deferred_binding_strings=deferred_binding_strings)
         else:
             if verbose:
                 print('Unable to decode')
@@ -874,7 +932,10 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
     return success
 
 
-def bej_decode(output_stream, input_stream, schema_dictionary, annotation_dictionary):
+def bej_decode(output_stream, input_stream, schema_dictionary, annotation_dictionary, pdr_map,
+               def_binding_strings):
+    global resource_link_to_pdr_map
+    resource_link_to_pdr_map = pdr_map
     # strip off the headers
     version = input_stream.read(4)
     assert(version == bytes([0x00, 0xF0, 0xF0, 0xF1]))
@@ -885,7 +946,8 @@ def bej_decode(output_stream, input_stream, schema_dictionary, annotation_dictio
 
     return bej_decode_stream(output_stream, input_stream, schema_dictionary, annotation_dictionary,
                              load_dictionary_subset_by_key_sequence(schema_dictionary, 0, -1),
-                             1, is_seq_array_index=False, add_name=False)
+                             1, is_seq_array_index=False, add_name=False,
+                             deferred_binding_strings=def_binding_strings)
 
 
 if __name__ == '__main__':
@@ -936,7 +998,7 @@ if __name__ == '__main__':
 
         # create a byte stream
         output_stream = io.BytesIO()
-        success = bej_encode(output_stream, json_to_encode, schema_dictionary, annotation_dictionary)
+        success, pdr_map = bej_encode(output_stream, json_to_encode, schema_dictionary, annotation_dictionary)
         if success:
             encoded_bytes = output_stream.getvalue()
             if not silent:
@@ -958,12 +1020,13 @@ if __name__ == '__main__':
         # Read the encoded bytes
         bej_encoded_bytes = list(args.bejEncodedFile.read())
 
+        pdr_map = resource_link_to_pdr_map
         if args.pdrMapFile:
-            resource_link_to_pdr_map = json.loads(args.pdrMapFile.read())
+            pdr_map = json.loads(args.pdrMapFile.read())
 
         input_stream = io.BytesIO(bytes(bej_encoded_bytes))
         output_stream = io.StringIO()
-        success = bej_decode(output_stream, input_stream, schema_dictionary, annotation_dictionary)
+        success = bej_decode(output_stream, input_stream, schema_dictionary, annotation_dictionary, pdr_map, {})
         if success:
             if not silent:
                 print(json.dumps(json.loads(output_stream.getvalue()), indent=3))
