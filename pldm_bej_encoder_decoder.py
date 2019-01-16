@@ -334,11 +334,11 @@ def bej_pack_property_annotation_start(stream):
     return tmp_stream
 
 
-def bej_pack_property_annotation_done(stream, annotation_seq):
+def bej_pack_property_annotation_done(stream, prop_seq):
     # pop the last stream from the stack and add the s, f and l. Length can now be determined from the current stream
     length = len(stream.getvalue())
     prev_stream = bej_set_stream_stack.pop()
-    num_bytes_packed = bej_pack_sfl(prev_stream, annotation_seq, BEJ_FORMAT_PROPERTY_ANNOTATION, length)
+    num_bytes_packed = bej_pack_sfl(prev_stream, prop_seq, BEJ_FORMAT_PROPERTY_ANNOTATION, length)
 
     # append the current stream to the prev and return prev
     prev_stream.write(stream.getvalue())
@@ -652,7 +652,6 @@ def bej_encode_stream(output_stream, json_data, schema_dict, annot_dict, dict_to
             tmp_dict_to_use = dict_to_use
             entry = []
             # dict_to_use = schema_dict
-            dictionary_selector_bit_value = BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA
 
             if is_payload_annotation(prop):
                 # two kinds - property annotation (e.g. Status@Message.ExtendedInfo) or payload annotation
@@ -668,17 +667,18 @@ def bej_encode_stream(output_stream, json_data, schema_dict, annot_dict, dict_to
 
             else:
                 entry = dict_entries[prop]
-                dictionary_selector_bit_value = BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA
+                dictionary_selector_bit_value = BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA \
+                    if dict_to_use == schema_dict else BEJ_DICTIONARY_SELECTOR_ANNOTATION
                 prop_format = entry[DICTIONARY_ENTRY_FORMAT]
 
             sequence_number_with_dictionary_selector = (entry[DICTIONARY_ENTRY_SEQUENCE_NUMBER] << 1) \
                                                        | dictionary_selector_bit_value
 
             if prop_format == BEJ_FORMAT_PROPERTY_ANNOTATION:
-                # Seq(Annotation_name)
+                # Seq(Prop_name)
                 #    Format(bejPropertyAnnotation)
                 #        Length
-                #            Seq(property sequence #)
+                #            Seq(Annotation_name)
                 #                Format(format of annotation value)
                 #                    Length
                 #                        Value(value: can be a complex type)
@@ -753,8 +753,10 @@ def bej_decode_enum_value(dict_to_use, dict_entry, value):
     return enum_value
 
 
-def bej_decode_name(annot_dict, seq, selector, entries_by_seq, output_stream):
-    if selector == BEJ_DICTIONARY_SELECTOR_ANNOTATION:
+def bej_decode_name(annot_dict, seq, selector, entries_by_seq, entries_by_seq_selector, output_stream):
+    if selector == entries_by_seq_selector:
+        name = entries_by_seq[seq][DICTIONARY_ENTRY_NAME]
+    elif selector == BEJ_DICTIONARY_SELECTOR_ANNOTATION:
         name = get_full_annotation_name_from_sequence_number(seq, annot_dict)
     else:
         name = entries_by_seq[seq][DICTIONARY_ENTRY_NAME]
@@ -785,8 +787,8 @@ def validate_complex_type_length(input_stream, complex_type_start_pos, length):
     return current_pos - set_value_start_pos == length
 
 
-def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entries_by_seq, prop_count,
-                      is_seq_array_index, add_name, deferred_binding_strings):
+def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entries_by_seq, entries_by_seq_selector,
+                      prop_count, is_seq_array_index, add_name, deferred_binding_strings):
     index = 0
     success = True
     while success and input_stream.tell() < get_stream_size(input_stream) and index < prop_count:
@@ -801,7 +803,7 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
             entry = entries_by_seq[seq]
 
             if add_name:
-                bej_decode_name(annot_dict, seq, selector, entries_by_seq, output_stream)
+                bej_decode_name(annot_dict, seq, selector, entries_by_seq, entries_by_seq_selector, output_stream)
 
             dict_to_use = schema_dict if selector is BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA else annot_dict
             output_stream.write('{')
@@ -809,6 +811,7 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
             success = bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict,
                                         load_dictionary_subset_by_key_sequence(
                                             dict_to_use, entry[DICTIONARY_ENTRY_OFFSET], entry[DICTIONARY_ENTRY_CHILD_COUNT]),
+                                        selector,
                                         count, is_seq_array_index=False, add_name=True, deferred_binding_strings=deferred_binding_strings)
             output_stream.write('}')
 
@@ -822,7 +825,7 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
             is_deferred_binding = bej_is_deferred_binding(input_stream)
             [seq, selector], value = bej_unpack_sflv_string(input_stream)
             if add_name:
-                bej_decode_name(annot_dict, seq, selector, entries_by_seq, output_stream)
+                bej_decode_name(annot_dict, seq, selector, entries_by_seq, entries_by_seq_selector, output_stream)
 
             if is_deferred_binding:
                 bindings_to_resolve = re.findall('%.*?%', value)
@@ -835,21 +838,21 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
         elif format == BEJ_FORMAT_INTEGER:
             [seq, selector], value = bej_unpack_sflv_integer(input_stream)
             if add_name:
-                bej_decode_name(annot_dict, seq, selector, entries_by_seq, output_stream)
+                bej_decode_name(annot_dict, seq, selector, entries_by_seq, entries_by_seq_selector, output_stream)
 
             output_stream.write(str(value))
 
         elif format == BEJ_FORMAT_BOOLEAN:
             [seq, selector], value = bej_unpack_sflv_boolean(input_stream)
             if add_name:
-                bej_decode_name(annot_dict, seq, selector, entries_by_seq, output_stream)
+                bej_decode_name(annot_dict, seq, selector, entries_by_seq, entries_by_seq_selector, output_stream)
 
             output_stream.write(value)
 
         elif format == BEJ_FORMAT_RESOURCE_LINK:
             [seq, selector], pdr = bej_unpack_sflv_resource_link(input_stream)
             if add_name:
-                bej_decode_name(annot_dict, seq, selector, entries_by_seq, output_stream)
+                bej_decode_name(annot_dict, seq, selector, entries_by_seq, entries_by_seq_selector, output_stream)
 
             output_stream.write('"' + get_link_from_pdr_map(pdr) + '"')
 
@@ -859,7 +862,7 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
                 seq = 0
 
             if add_name:
-                bej_decode_name(annot_dict, seq, selector, entries_by_seq, output_stream)
+                bej_decode_name(annot_dict, seq, selector, entries_by_seq, entries_by_seq_selector, output_stream)
 
             enum_value = bej_decode_enum_value(schema_dict, entries_by_seq[seq], value)
             output_stream.write('"' + enum_value + '"')
@@ -867,7 +870,7 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
         elif format == BEJ_FORMAT_NULL:
             [seq, selector] = bej_unpack_sflv_null(input_stream)
             if add_name:
-                bej_decode_name(annot_dict, seq, selector, entries_by_seq, output_stream)
+                bej_decode_name(annot_dict, seq, selector, entries_by_seq, entries_by_seq_selector, output_stream)
 
             output_stream.write('null')
 
@@ -880,7 +883,7 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
             entry = entries_by_seq[seq]
 
             if add_name:
-                bej_decode_name(annot_dict, seq, selector, entries_by_seq, output_stream)
+                bej_decode_name(annot_dict, seq, selector, entries_by_seq, entries_by_seq_selector, output_stream)
 
             dict_to_use = schema_dict if selector is BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA else annot_dict
             output_stream.write('[')
@@ -888,6 +891,7 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
                 success = bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict,
                                             load_dictionary_subset_by_key_sequence(dict_to_use, entry[DICTIONARY_ENTRY_OFFSET],
                                                                                    entry[DICTIONARY_ENTRY_CHILD_COUNT]),
+                                            selector,
                                             prop_count=1, is_seq_array_index=True, add_name=False,
                                             deferred_binding_strings=deferred_binding_strings)
                 if i < array_member_count-1:
@@ -918,6 +922,7 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
 
             success = bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict,
                                         get_annotation_dictionary_entries_by_seq(annot_dict),
+                                        BEJ_DICTIONARY_SELECTOR_ANNOTATION,
                                         prop_count=1, is_seq_array_index=False, add_name=False,
                                         deferred_binding_strings=deferred_binding_strings)
         else:
@@ -946,6 +951,7 @@ def bej_decode(output_stream, input_stream, schema_dictionary, annotation_dictio
 
     return bej_decode_stream(output_stream, input_stream, schema_dictionary, annotation_dictionary,
                              load_dictionary_subset_by_key_sequence(schema_dictionary, 0, -1),
+                             BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA,
                              1, is_seq_array_index=False, add_name=False,
                              deferred_binding_strings=def_binding_strings)
 

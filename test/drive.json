@@ -14,11 +14,13 @@
     "Status@Message.ExtendedInfo": [
         {
             "MessageId": "PredictiveFailure",
-            "Severity": "Warning"
+            "Severity": "Warning",
+            "RelatedProperties": ["FailurePredicted", "MediaType"]
         },
         {
             "MessageId": "LinkFailure",
-            "Severity": "Warning"
+            "Severity": "Warning",
+            "MessageArgs": ["Port", "1"]
         }
     ],
     "CapacityBytes": 500105991946,
