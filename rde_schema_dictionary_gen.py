@@ -769,10 +769,7 @@ def add_odata_annotations(annotation_dictionary, odata_annotation_location):
         bej_format = ''
         json_format = v['type']
         if json_format == 'string':
-            if k == 'id':  # special case odata.id to be a resource link
-                bej_format = 'ResourceLink'
-            else:
-                bej_format = 'String'
+            bej_format = 'String'
         elif json_format == 'number':
             bej_format = 'Integer'
         elif json_format == 'object':
@@ -899,10 +896,7 @@ def convert_json_type_to_bej_format(k, v, entity_repo):
         json_format = v['type']
 
         if json_format == 'string':
-            if k == '@odata.id':  # special case odata.id to be a resource link
-                bej_format = 'ResourceLink'
-            else:
-                bej_format = 'String'
+            bej_format = 'String'
         elif json_format == 'number' or json_format == 'integer':
             bej_format = 'Integer'
         elif json_format == 'object':

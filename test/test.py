@@ -79,6 +79,18 @@ MAJOR_SCHEMA_DICTIONARY_LIST = [
                                     'Storage.Storage',
                                     '',
                                     '',
+                                    '',
+                                    'storage.bin',
+                                    'test/storage_large.json',
+                                    'Copyright (c) 2018 Acme Corp'),
+
+                                TestSpecification(
+                                    '$/metadata',
+                                    '$/json-schema',
+                                    'Storage_v1.xml',
+                                    'Storage.Storage',
+                                    '',
+                                    '',
                                     'test/example_profile_for_truncation.json',
                                     'storage.bin',
                                     'test/storage_profile_conformant.json',
@@ -298,16 +310,22 @@ if __name__ == '__main__':
                                         schema_dictionary.dictionary_byte_array,
                                         annotation_dictionary.dictionary_byte_array
                                     )
+
+        # build the deferred binding strings from the pdr_map
+        deferred_binding_strings = {}
+        for url, pdr_num in pdr_map.items():
+            deferred_binding_strings['%LINK.PDR' + str(pdr_num) + '%'] = url
+
         assert encode_success,'Encode failure'
         encoded_bytes = bej_stream.getvalue()
-        bej_module.print_hex(encoded_bytes)
+        bej_module.print_encode_summary(json_to_encode, encoded_bytes)
 
         decode_stream = io.StringIO()
         decode_success = bej_module.bej_decode(
                                         decode_stream,
                                         io.BytesIO(bytes(encoded_bytes)),
                                         schema_dictionary.dictionary_byte_array,
-                                        annotation_dictionary.dictionary_byte_array, pdr_map, {}
+                                        annotation_dictionary.dictionary_byte_array, pdr_map, deferred_binding_strings
                                     )
         assert decode_success,'Decode failure'
 

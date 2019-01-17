@@ -141,12 +141,12 @@ def bej_unpack_nnint(stream):
     return int.from_bytes(stream.read(num_bytes), 'little')
 
 
-def bej_pack_sfl(stream, seq_num, format, length):
+def bej_pack_sfl(stream, seq_num, format, length, format_flags=0):
     # pack seq num as nnint
     num_bytes = bej_pack_nnint(stream, seq_num, 0)
 
     # pack format
-    format = format << 4
+    format = (format << 4) | format_flags
     num_bytes += stream.write(format.to_bytes(1, 'little'))
 
     # pack length as nnint
@@ -168,8 +168,11 @@ def bej_unpack_sfl(stream):
     return seq, format, length
 
 
-def bej_pack_sflv_string(stream, seq_num, str):
-    num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_STRING, len(str) + 1)
+def bej_pack_sflv_string(stream, seq_num, str, is_deferred_binding=False):
+    format_flags = 0
+    if is_deferred_binding:
+        format_flags = 0x01
+    num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_STRING, len(str) + 1, format_flags)
 
     # pack str
     null = 0
@@ -587,10 +590,10 @@ def bej_encode_enum(output_stream, dict_to_use, dict_entry, sequence_number_with
     bej_pack_sflv_enum(output_stream, sequence_number_with_dictionary_selector, value)
 
 
-def bej_encode_sflv(output_stream, schema_dict, annot_dict, dict_to_use, dict_entry, seq, format, json_value):
+def bej_encode_sflv(output_stream, schema_dict, annot_dict, dict_to_use, dict_entry, seq, format, json_value, format_flags=0):
     success = True
     if format == BEJ_FORMAT_STRING:
-        bej_pack_sflv_string(output_stream, seq, json_value)
+        bej_pack_sflv_string(output_stream, seq, json_value, format_flags)
 
     elif format == BEJ_FORMAT_INTEGER:
         bej_pack_sflv_integer(output_stream, seq, json_value)
@@ -695,8 +698,21 @@ def bej_encode_stream(output_stream, json_data, schema_dict, annot_dict, dict_to
 
                 bej_pack_property_annotation_done(nested_stream, prop_seq)
             else:
+                json_value = json_data[prop]
+                format_flags = 0
+                # Special handling for '@odata.id' deferred binding string
+                if prop == '@odata.id' and prop_format == BEJ_FORMAT_STRING:
+                    global current_available_pdr
+                    # add an entry to the PDR
+                    if json_value not in resource_link_to_pdr_map:
+                        resource_link_to_pdr_map[json_value] = current_available_pdr
+                        current_available_pdr += 1
+                    new_pdr_num = resource_link_to_pdr_map[json_value]
+                    json_value = '%LINK.PDR' + str(new_pdr_num) + '%'
+                    format_flags = 0x01
+
                 success = bej_encode_sflv(output_stream, schema_dict, annot_dict, tmp_dict_to_use, entry,
-                                          sequence_number_with_dictionary_selector, prop_format, json_data[prop])
+                                          sequence_number_with_dictionary_selector, prop_format, json_value, format_flags)
         else:
             if verbose:
                 print('Property cannot be encoded - missing dictionary entry', prop)
@@ -956,6 +972,14 @@ def bej_decode(output_stream, input_stream, schema_dictionary, annotation_dictio
                              deferred_binding_strings=def_binding_strings)
 
 
+def print_encode_summary(json_to_encode, encoded_bytes):
+    total_json_size = len(json.dumps(json_to_encode, separators=(',', ':')))
+    print_hex(encoded_bytes)
+    print('JSON size:', total_json_size)
+    print('Total encode size:', len(encoded_bytes))
+    print('Compression ratio(%):', (1.0 - len(encoded_bytes) / total_json_size) * 100)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
@@ -1000,7 +1024,6 @@ if __name__ == '__main__':
             json_str = sys.stdin.read()
 
         json_to_encode = json.loads(json_str)
-        total_json_size = len(json.dumps(json_to_encode, separators=(',', ':')))
 
         # create a byte stream
         output_stream = io.BytesIO()
@@ -1008,10 +1031,7 @@ if __name__ == '__main__':
         if success:
             encoded_bytes = output_stream.getvalue()
             if not silent:
-                print_hex(encoded_bytes)
-                print('JSON size:', total_json_size)
-                print('Total encode size:', len(encoded_bytes))
-                print('Compression ratio(%):', (1.0 - len(encoded_bytes)/total_json_size)*100)
+                print_encode_summary(json_to_encode, encoded_bytes)
 
             if args.bejOutputFile:
                 args.bejOutputFile.write(encoded_bytes)
