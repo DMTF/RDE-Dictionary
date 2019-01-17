@@ -79,6 +79,18 @@ MAJOR_SCHEMA_DICTIONARY_LIST = [
                                     'Storage.Storage',
                                     '',
                                     '',
+                                    '',
+                                    'storage.bin',
+                                    'test/storage_large.json',
+                                    'Copyright (c) 2018 Acme Corp'),
+
+                                TestSpecification(
+                                    '$/metadata',
+                                    '$/json-schema',
+                                    'Storage_v1.xml',
+                                    'Storage.Storage',
+                                    '',
+                                    '',
                                     'test/example_profile_for_truncation.json',
                                     'storage.bin',
                                     'test/storage_profile_conformant.json',
@@ -300,7 +312,7 @@ if __name__ == '__main__':
                                     )
         assert encode_success,'Encode failure'
         encoded_bytes = bej_stream.getvalue()
-        bej_module.print_hex(encoded_bytes)
+        bej_module.print_encode_summary(json_to_encode, encoded_bytes)
 
         decode_stream = io.StringIO()
         decode_success = bej_module.bej_decode(

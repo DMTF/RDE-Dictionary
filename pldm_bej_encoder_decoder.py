@@ -956,6 +956,14 @@ def bej_decode(output_stream, input_stream, schema_dictionary, annotation_dictio
                              deferred_binding_strings=def_binding_strings)
 
 
+def print_encode_summary(json_to_encode, encoded_bytes):
+    total_json_size = len(json.dumps(json_to_encode, separators=(',', ':')))
+    print_hex(encoded_bytes)
+    print('JSON size:', total_json_size)
+    print('Total encode size:', len(encoded_bytes))
+    print('Compression ratio(%):', (1.0 - len(encoded_bytes) / total_json_size) * 100)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
@@ -1000,7 +1008,6 @@ if __name__ == '__main__':
             json_str = sys.stdin.read()
 
         json_to_encode = json.loads(json_str)
-        total_json_size = len(json.dumps(json_to_encode, separators=(',', ':')))
 
         # create a byte stream
         output_stream = io.BytesIO()
@@ -1008,10 +1015,7 @@ if __name__ == '__main__':
         if success:
             encoded_bytes = output_stream.getvalue()
             if not silent:
-                print_hex(encoded_bytes)
-                print('JSON size:', total_json_size)
-                print('Total encode size:', len(encoded_bytes))
-                print('Compression ratio(%):', (1.0 - len(encoded_bytes)/total_json_size)*100)
+                print_encode_summary(json_to_encode, encoded_bytes)
 
             if args.bejOutputFile:
                 args.bejOutputFile.write(encoded_bytes)
