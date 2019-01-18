@@ -1184,6 +1184,13 @@ def generate_byte_array(dictionary, version, is_truncated, copyright):
     # track property name offsets, this is initialized to the first property name
     name_offset = dictionary_binary_header_size() + (len(dictionary) * dictionary_binary_entry_size())
 
+    # maintain a dictionary of names to offsets to allow multiple fixed sized entries to point
+    # to the same name
+    name_to_offset_dict = {}
+
+    # list of unique names to add to the end of the dictionary
+    names = []
+
     # Add the fixed sized entries
     for item in dictionary:
         # Format
@@ -1214,16 +1221,23 @@ def generate_byte_array(dictionary, version, is_truncated, copyright):
 
         # NameOffset
         if item[DICTIONARY_ENTRY_FIELD_STRING]:
-            binary_data.extend(name_offset.to_bytes(2, 'little'))
-            name_offset += len(item[DICTIONARY_ENTRY_FIELD_STRING]) + 1
+            if item[DICTIONARY_ENTRY_FIELD_STRING] in name_to_offset_dict:
+                offset = name_to_offset_dict[item[DICTIONARY_ENTRY_FIELD_STRING]]
+            else:
+                # add name and increment name_offset
+                name_to_offset_dict[item[DICTIONARY_ENTRY_FIELD_STRING]] = name_offset
+                offset = name_offset
+                names.append(item[DICTIONARY_ENTRY_FIELD_STRING])
+                name_offset += len(item[DICTIONARY_ENTRY_FIELD_STRING]) + 1
+
+            binary_data.extend(offset.to_bytes(2, 'little'))
         else:
             binary_data.extend([0x00, 0x00])
 
-    # Add the property names
-    for item in dictionary:
-        if item[DICTIONARY_ENTRY_FIELD_STRING]:
-            binary_data.extend([ord(elem) for elem in item[DICTIONARY_ENTRY_FIELD_STRING]])
-            binary_data.append(0x00)
+    # Add the property names to the end of the dictionary
+    for name in names:
+        binary_data.extend([ord(elem) for elem in name])
+        binary_data.append(0x00)  # null terminator
 
     # Add the copyright string if any
     if copyright and len(copyright):
