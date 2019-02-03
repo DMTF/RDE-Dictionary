@@ -703,13 +703,18 @@ def bej_encode_stream(output_stream, json_data, schema_dict, annot_dict, dict_to
                 # Special handling for '@odata.id' deferred binding string
                 if prop == '@odata.id' and prop_format == BEJ_FORMAT_STRING:
                     global current_available_pdr
-                    # add an entry to the PDR
-                    if json_value not in resource_link_to_pdr_map:
-                        resource_link_to_pdr_map[json_value] = current_available_pdr
+                    # Add an entry to the PDR map
+                    # Special case frags by only including the string preceeding the '#' into
+                    # the PDR map
+                    res_link_parts = json_value.split('#')
+                    if res_link_parts[0] not in resource_link_to_pdr_map:
+                        resource_link_to_pdr_map[res_link_parts[0]] = current_available_pdr
                         current_available_pdr += 1
-                    new_pdr_num = resource_link_to_pdr_map[json_value]
-                    json_value = '%LINK.PDR' + str(new_pdr_num) + '%'
-                    format_flags = 0x01
+                    new_pdr_num = resource_link_to_pdr_map[res_link_parts[0]]
+                    json_value = '%L' + str(new_pdr_num)
+                    if len(res_link_parts) > 1:  # add the frag portion to the deferred binding string if any
+                        json_value += '#' + res_link_parts[1]
+                    format_flags = 0x01  # deferred binding flag
 
                 success = bej_encode_sflv(output_stream, schema_dict, annot_dict, tmp_dict_to_use, entry,
                                           sequence_number_with_dictionary_selector, prop_format, json_value, format_flags)
@@ -844,7 +849,7 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
                 bej_decode_name(annot_dict, seq, selector, entries_by_seq, entries_by_seq_selector, output_stream)
 
             if is_deferred_binding:
-                bindings_to_resolve = re.findall('%.*?%', value)
+                bindings_to_resolve = re.findall('%[LTP][0-9]+\.?[0-9]*.*?', value)
                 for binding in bindings_to_resolve:
                     if binding in deferred_binding_strings:
                         value = value.replace(binding, deferred_binding_strings[binding])
@@ -896,12 +901,20 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
             if is_seq_array_index:
                 seq = 0
 
+            dict_to_use = schema_dict if selector is BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA else annot_dict
+
+            # if we are changing dictionary context, we need to load entries for the new dictionary
+            if entries_by_seq_selector != selector:
+                base_entry = DictionaryByteArrayStream(dict_to_use, 0, -1).get_next_entry()
+                entries_by_seq = load_dictionary_subset_by_key_sequence(dict_to_use,
+                                                                            base_entry[DICTIONARY_ENTRY_OFFSET],
+                                                                            base_entry[DICTIONARY_ENTRY_CHILD_COUNT])
+
             entry = entries_by_seq[seq]
 
             if add_name:
                 bej_decode_name(annot_dict, seq, selector, entries_by_seq, entries_by_seq_selector, output_stream)
 
-            dict_to_use = schema_dict if selector is BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA else annot_dict
             output_stream.write('[')
             for i in range(0, array_member_count):
                 success = bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict,
@@ -953,8 +966,8 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
     return success
 
 
-def bej_decode(output_stream, input_stream, schema_dictionary, annotation_dictionary, pdr_map,
-               def_binding_strings):
+def bej_decode(output_stream, input_stream, schema_dictionary, annotation_dictionary,
+               error_dictionary, pdr_map, def_binding_strings):
     global resource_link_to_pdr_map
     resource_link_to_pdr_map = pdr_map
     # strip off the headers
@@ -963,13 +976,20 @@ def bej_decode(output_stream, input_stream, schema_dictionary, annotation_dictio
     flags = input_stream.read(2)
     assert (flags == bytes([0x00, 0x00]))
     schemaClass = input_stream.read(1)
-    assert(schemaClass == bytes([0x00]))
+    assert(schemaClass in [bytes([0x00]), bytes([0x04])])
 
-    return bej_decode_stream(output_stream, input_stream, schema_dictionary, annotation_dictionary,
-                             load_dictionary_subset_by_key_sequence(schema_dictionary, 0, -1),
-                             BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA,
-                             1, is_seq_array_index=False, add_name=False,
-                             deferred_binding_strings=def_binding_strings)
+    if schemaClass == bytes([0x00]): # Major schema class
+        return bej_decode_stream(output_stream, input_stream, schema_dictionary, annotation_dictionary,
+                                 load_dictionary_subset_by_key_sequence(schema_dictionary, 0, -1),
+                                 BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA,
+                                 1, is_seq_array_index=False, add_name=False,
+                                 deferred_binding_strings=def_binding_strings)
+    else: # Error schema class
+        return bej_decode_stream(output_stream, input_stream, error_dictionary, annotation_dictionary,
+                                 load_dictionary_subset_by_key_sequence(error_dictionary, 0, -1),
+                                 BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA,
+                                 1, is_seq_array_index=False, add_name=False,
+                                 deferred_binding_strings=def_binding_strings)
 
 
 def print_encode_summary(json_to_encode, encoded_bytes):
