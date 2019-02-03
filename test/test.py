@@ -273,6 +273,59 @@ if __name__ == '__main__':
         print("Error: Exception type: {0}, message: {1}".format(ex.__class__.__name__, str(ex)))
         exit(1)
 
+    # Generate the error schema dictionary
+    print('Generating error schema dictionary...')
+    try:
+        error_schema_dictionary = rde_dictionary_module.generate_error_schema_dictionary(
+            [schema_test_dir + '/metadata'],
+            [schema_test_dir + '/json-schema']
+        )
+
+        if error_schema_dictionary and error_schema_dictionary.dictionary \
+                and error_schema_dictionary.dictionary_byte_array and error_schema_dictionary.json_dictionary:
+            print('Entries:', len(error_schema_dictionary.dictionary), 'Size:',
+                  len(error_schema_dictionary.dictionary_byte_array))
+            with open('error.bin', 'wb') as error_bin:
+                error_bin.write(bytearray(error_schema_dictionary.dictionary_byte_array))
+            rde_dictionary_module.print_binary_dictionary(error_schema_dictionary.dictionary_byte_array)
+
+        # Run the encode/decode
+        bej_stream = io.BytesIO()
+
+        json_to_encode = json.load(open('test/error.json'))
+        encode_success, pdr_map = bej_module.bej_encode(
+                                        bej_stream,
+                                        json_to_encode,
+                                        error_schema_dictionary.dictionary_byte_array,
+                                        annotation_dictionary.dictionary_byte_array
+                                    )
+        assert encode_success,'Encode failure'
+        encoded_bytes = bej_stream.getvalue()
+        bej_module.print_encode_summary(json_to_encode, encoded_bytes)
+
+        decode_stream = io.StringIO()
+        decode_success = bej_module.bej_decode(
+                                        decode_stream,
+                                        io.BytesIO(bytes(encoded_bytes)),
+                                        error_schema_dictionary.dictionary_byte_array,
+                                        annotation_dictionary.dictionary_byte_array,
+                                        error_schema_dictionary, pdr_map, {}
+                                    )
+        assert decode_success,'Decode failure'
+
+        decode_file = decode_stream.getvalue()
+
+        # compare the decode with the original
+        print('Decoded JSON:')
+        print(json.dumps(json.loads(decode_file), indent=3))
+        assert(json.loads(decode_file) == json.load(open('test/error.json'))), \
+            'Mismtach in original JSON and decoded JSON'
+
+    except Exception as ex:
+        print("Error: Could not validate error schema dictionary")
+        print("Error: Exception type: {0}, message: {1}".format(ex.__class__.__name__, str(ex)))
+        exit(1)
+
     # Generate the major schema dictionaries
     for major_schema in MAJOR_SCHEMA_DICTIONARY_LIST:
 
@@ -325,7 +378,8 @@ if __name__ == '__main__':
                                         decode_stream,
                                         io.BytesIO(bytes(encoded_bytes)),
                                         schema_dictionary.dictionary_byte_array,
-                                        annotation_dictionary.dictionary_byte_array, pdr_map, deferred_binding_strings
+                                        annotation_dictionary.dictionary_byte_array,
+                                        error_schema_dictionary, pdr_map, deferred_binding_strings
                                     )
         assert decode_success,'Decode failure'
 
@@ -341,6 +395,7 @@ if __name__ == '__main__':
 
     # cleanup
     os.remove('annotation.bin')
+    os.remove('error.bin')
 
     if delete_schema_test_dir:
         shutil.rmtree(schema_test_dir, onerror=onerror)

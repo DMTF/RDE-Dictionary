@@ -136,7 +136,7 @@ def is_property_nullable(property):
 
 def get_property_permissions(property):
     """
-    Returns whether the read-only versus read-write permissions for a property. If the permission is not set, 
+    Returns whether the read-only versus read-write permissions for a property. If the permission is not set,
     then the permission is null.
     """
     permissions = property.xpath('child::edm:Annotation[@Term=\'OData.Permissions\']', namespaces=ODATA_ALL_NAMESPACES)
@@ -478,7 +478,7 @@ def get_latest_version(entity):
     result = [key for key, value in includeNamespaces.items() if key.startswith(entity.split('.')[1]+'.')]
 
     # The last item in result will have the latest version
-    if len(result) > 1:  # This is a versioned namespace
+    if result:  # This is a versioned namespace
         return result[len(result) - 1].split('.')[1]
     else:  # This is unversioned, return v0_0_0
         return 'v0_0_0'
@@ -686,6 +686,9 @@ def generate_json_dictionary(json_schema_dirs, dictionary, dictionary_byte_array
     # Special case for annotations
     if entity == 'annotation':
         summary['schema_url'] = 'http://redfish.dmtf.org/schemas/v1/redfish-payload-annotations.'\
+                                +to_redfish_version(ver32)+'.json'
+    elif entity == 'RedfishError.RedfishError':
+        summary['schema_url'] = 'http://redfish.dmtf.org/schemas/v1/redfish-error.'\
                                 +to_redfish_version(ver32)+'.json'
     else:
         summary['schema_url'] = find_schema_url(json_schema_dirs, entity.split('.')[0], version_str,
@@ -1178,6 +1181,13 @@ def generate_byte_array(dictionary, version, is_truncated, copyright):
     # track property name offsets, this is initialized to the first property name
     name_offset = dictionary_binary_header_size() + (len(dictionary) * dictionary_binary_entry_size())
 
+    # maintain a dictionary of names to offsets to allow multiple fixed sized entries to point
+    # to the same name
+    name_to_offset_dict = {}
+
+    # list of unique names to add to the end of the dictionary
+    names = []
+
     # Add the fixed sized entries
     for item in dictionary:
         # Format
@@ -1208,16 +1218,23 @@ def generate_byte_array(dictionary, version, is_truncated, copyright):
 
         # NameOffset
         if item[DICTIONARY_ENTRY_FIELD_STRING]:
-            binary_data.extend(name_offset.to_bytes(2, 'little'))
-            name_offset += len(item[DICTIONARY_ENTRY_FIELD_STRING]) + 1
+            if item[DICTIONARY_ENTRY_FIELD_STRING] in name_to_offset_dict:
+                offset = name_to_offset_dict[item[DICTIONARY_ENTRY_FIELD_STRING]]
+            else:
+                # add name and increment name_offset
+                name_to_offset_dict[item[DICTIONARY_ENTRY_FIELD_STRING]] = name_offset
+                offset = name_offset
+                names.append(item[DICTIONARY_ENTRY_FIELD_STRING])
+                name_offset += len(item[DICTIONARY_ENTRY_FIELD_STRING]) + 1
+
+            binary_data.extend(offset.to_bytes(2, 'little'))
         else:
             binary_data.extend([0x00, 0x00])
 
-    # Add the property names
-    for item in dictionary:
-        if item[DICTIONARY_ENTRY_FIELD_STRING]:
-            binary_data.extend([ord(elem) for elem in item[DICTIONARY_ENTRY_FIELD_STRING]])
-            binary_data.append(0x00)
+    # Add the property names to the end of the dictionary
+    for name in names:
+        binary_data.extend([ord(elem) for elem in name])
+        binary_data.append(0x00)  # null terminator
 
     # Add the copyright string if any
     if copyright and len(copyright):
@@ -1498,6 +1515,25 @@ def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
                                  json_dictionary=None))
 
 
+def generate_error_schema_dictionary(csdl_schema_dirs, json_schema_dirs, copyright=None):
+    """ Generate the error schema dictionary.
+
+    Args:
+        csdl_schema_dirs: List of CSDL schema directories.
+        json_schema_dirs: List of JSON schema directories.
+
+    Return:
+        SchemaDictionary: Named tuple which has the following fields:
+                          dictionary - The error schema dictionary.
+                          dictionary_byte_array - The error schema dictionary in byte array.
+                          json_dictionary - Error schema dictionary in JSON format.
+    """
+    return generate_schema_dictionary('local', csdl_schema_dirs, json_schema_dirs,
+                                      'RedfishError.RedfishError', 'RedfishError_v1.xml',
+                                      oem_entities=None, oem_schema_file_names=None, profile=None, schema_url=None,
+                                      copyright=copyright)
+
+
 if __name__ == '__main__':
     # rde_schema_dictionary parse --schemaDir=directory --schemaFilename=filename
     parser = argparse.ArgumentParser()
@@ -1530,6 +1566,13 @@ if __name__ == '__main__':
     annotation_v2_parser.add_argument('-r', '--copyright', type=str, required=False)
     annotation_v2_parser.add_argument('-d', '--outputFile', type=argparse.FileType('wb'), required=False)
     annotation_v2_parser.add_argument('-f', '--outputJsonDictionaryFile', type=argparse.FileType('w'), required=False)
+
+    error_parser = subparsers.add_parser('error')
+    error_parser.add_argument('-c', '--csdlSchemaDirectories', nargs='*', type=str, required=True)
+    error_parser.add_argument('-j', '--jsonSchemaDirectories', nargs='*', type=str, required=True)
+    error_parser.add_argument('-r', '--copyright', type=str, required=False)
+    error_parser.add_argument('-d', '--outputFile', type=argparse.FileType('wb'), required=False)
+    error_parser.add_argument('-f', '--outputJsonDictionaryFile', type=argparse.FileType('w'), required=False)
 
     dictionary_dump = subparsers.add_parser('view')
     dictionary_dump.add_argument('-f', '--file', type=str, required=True)
@@ -1571,6 +1614,9 @@ if __name__ == '__main__':
         schema_dictionary = generate_annotation_schema_dictionary(args.csdlSchemaDirectories,
                                                                   args.jsonSchemaDirectories, args.version,
                                                                   args.copyright)
+    elif args.source == 'error':
+        schema_dictionary = generate_error_schema_dictionary(args.csdlSchemaDirectories,
+                                                             args.jsonSchemaDirectories, args.copyright)
 
     # Print table data.
     if schema_dictionary.dictionary:

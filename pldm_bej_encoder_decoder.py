@@ -896,12 +896,20 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
             if is_seq_array_index:
                 seq = 0
 
+            dict_to_use = schema_dict if selector is BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA else annot_dict
+
+            # if we are changing dictionary context, we need to load entries for the new dictionary
+            if entries_by_seq_selector != selector:
+                base_entry = DictionaryByteArrayStream(dict_to_use, 0, -1).get_next_entry()
+                entries_by_seq = load_dictionary_subset_by_key_sequence(dict_to_use,
+                                                                            base_entry[DICTIONARY_ENTRY_OFFSET],
+                                                                            base_entry[DICTIONARY_ENTRY_CHILD_COUNT])
+
             entry = entries_by_seq[seq]
 
             if add_name:
                 bej_decode_name(annot_dict, seq, selector, entries_by_seq, entries_by_seq_selector, output_stream)
 
-            dict_to_use = schema_dict if selector is BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA else annot_dict
             output_stream.write('[')
             for i in range(0, array_member_count):
                 success = bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict,
@@ -953,8 +961,8 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
     return success
 
 
-def bej_decode(output_stream, input_stream, schema_dictionary, annotation_dictionary, pdr_map,
-               def_binding_strings):
+def bej_decode(output_stream, input_stream, schema_dictionary, annotation_dictionary,
+               error_dictionary, pdr_map, def_binding_strings):
     global resource_link_to_pdr_map
     resource_link_to_pdr_map = pdr_map
     # strip off the headers
@@ -963,13 +971,20 @@ def bej_decode(output_stream, input_stream, schema_dictionary, annotation_dictio
     flags = input_stream.read(2)
     assert (flags == bytes([0x00, 0x00]))
     schemaClass = input_stream.read(1)
-    assert(schemaClass == bytes([0x00]))
+    assert(schemaClass in [bytes([0x00]), bytes([0x04])])
 
-    return bej_decode_stream(output_stream, input_stream, schema_dictionary, annotation_dictionary,
-                             load_dictionary_subset_by_key_sequence(schema_dictionary, 0, -1),
-                             BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA,
-                             1, is_seq_array_index=False, add_name=False,
-                             deferred_binding_strings=def_binding_strings)
+    if schemaClass == bytes([0x00]): # Major schema class
+        return bej_decode_stream(output_stream, input_stream, schema_dictionary, annotation_dictionary,
+                                 load_dictionary_subset_by_key_sequence(schema_dictionary, 0, -1),
+                                 BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA,
+                                 1, is_seq_array_index=False, add_name=False,
+                                 deferred_binding_strings=def_binding_strings)
+    else: # Error schema class
+        return bej_decode_stream(output_stream, input_stream, error_dictionary, annotation_dictionary,
+                                 load_dictionary_subset_by_key_sequence(error_dictionary, 0, -1),
+                                 BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA,
+                                 1, is_seq_array_index=False, add_name=False,
+                                 deferred_binding_strings=def_binding_strings)
 
 
 def print_encode_summary(json_to_encode, encoded_bytes):
