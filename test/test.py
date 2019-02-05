@@ -363,6 +363,12 @@ if __name__ == '__main__':
                                         schema_dictionary.dictionary_byte_array,
                                         annotation_dictionary.dictionary_byte_array
                                     )
+
+        # build the deferred binding strings from the pdr_map
+        deferred_binding_strings = {}
+        for url, pdr_num in pdr_map.items():
+            deferred_binding_strings['%L' + str(pdr_num)] = url
+
         assert encode_success,'Encode failure'
         encoded_bytes = bej_stream.getvalue()
         bej_module.print_encode_summary(json_to_encode, encoded_bytes)
@@ -373,7 +379,7 @@ if __name__ == '__main__':
                                         io.BytesIO(bytes(encoded_bytes)),
                                         schema_dictionary.dictionary_byte_array,
                                         annotation_dictionary.dictionary_byte_array,
-                                        error_schema_dictionary, pdr_map, {}
+                                        error_schema_dictionary, pdr_map, deferred_binding_strings
                                     )
         assert decode_success,'Decode failure'
 
