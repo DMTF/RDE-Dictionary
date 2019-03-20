@@ -1488,7 +1488,9 @@ def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
                 else:
                     if verbose:
                         print('Error parsing profile')
-                    sys.exit(1)
+                    return (SchemaDictionary(dictionary=None,
+                                             dictionary_byte_array=None,
+                                             json_dictionary=None))
 
             add_dictionary_entries(dictionary, entity_repo, entity, entity_offset_map, True, get_entity_name(entity))
             dictionary = generate_dictionary(dictionary, entity_repo, entity_offset_map)

@@ -1072,11 +1072,10 @@ if __name__ == '__main__':
 
         input_stream = io.BytesIO(bytes(bej_encoded_bytes))
         output_stream = io.StringIO()
-        success = bej_decode(output_stream, input_stream, schema_dictionary, annotation_dictionary, pdr_map, {})
+        success = bej_decode(output_stream, input_stream, schema_dictionary, annotation_dictionary, {}, pdr_map, {})
         if success:
             if not silent:
                 print(json.dumps(json.loads(output_stream.getvalue()), indent=3))
         else:
             if not silent:
                 print('Failed to decode JSON')
-
