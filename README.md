@@ -4,9 +4,9 @@
 # rde-dictionary-builder
 
 ## Pre Requisites:
-#####Minimum Python Version: 3.6
+Minimum Python Version: 3.6
 
-#####Minimum Redfish Schema Version: 1.6 (2018.3)
+Minimum Redfish Schema Version: 1.6 (2018.3)
 
 Conformance: PLDM for Redfish Device Enablement 1.0.0 draft 5
 
