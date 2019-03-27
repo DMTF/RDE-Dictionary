@@ -517,7 +517,7 @@ Signature: 0x1ae1ca48
 ## Example Encoding JSON into PLDM BEJ
 1. Create schema and annotation dictionaries for the schema that the input JSON object conforms to (this examples uses the Redfish Drive schema):
 ```
-python rde_schema_dictionary_gen.py local --csdlSchemaDirectories test/schema/metadata  test/schema/oem-csdl --jsonSchemaDirectories test/schema/json-schema --schemaFilename Drive_v1.xml --entity Drive.Drive --outputFile drive.bin
+python rde_schema_dictionary_gen.py local --csdlSchemaDirectories test/schema/metadata  test/schema/oem-csdl --jsonSchemaDirectories test/schema/json-schema --schemaFilename Drive_v1.xml --entity Drive.Drive --oemSchemaFilenames OEM1DriveExt_v1.xml OEM2DriveExt_v1.xml --oemEntities OEM1=OEM1DriveExt.OEM1DriveExt OEM2=OEM2DriveExt.OEM2DriveExt --outputFile drive.bin
 
 python rde_schema_dictionary_gen.py annotation --csdlSchemaDirectories test/schema/metadata --jsonSchemaDirectories test/schema/json-schema -v v1_0_0 --outputFile annotation.bin
 ```

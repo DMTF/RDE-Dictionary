@@ -11,3 +11,4 @@ install:
    
 script:
    - pipenv run python -u test/test.py 
+   - test/test_cli.sh

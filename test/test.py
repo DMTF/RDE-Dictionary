@@ -9,9 +9,12 @@ import argparse
 from git import Repo
 import shutil
 import stat
+import traceback
 
-rde_lib_name = "rde_schema_dictionary_gen"
-bej_encode_decode_lib_name = "pldm_bej_encoder_decoder"
+sys.path.append('./')
+
+from rdebej import dictionary
+from rdebej import encode, decode
 
 TestSpecification = namedtuple('TestSpecification', 'csdl_directories '
                                                     'json_schema_directories '
@@ -166,23 +169,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    # Import the RDE dictionary builder script.
-    try:
-        sys.path.append('./')
-        rde_dictionary_module = importlib.import_module(rde_lib_name)
-    except Exception as ex:
-        print("Error: Failed to import RDE dictionary builder library:", rde_lib_name)
-        print("Error: Exception type: {0}, message: {1}".format(ex.__class__.__name__, str(ex)))
-        sys.exit(1)
 
-    # Import the BEJ encoder/decoder script.
-    try:
-        sys.path.append('./')
-        bej_module = importlib.import_module(bej_encode_decode_lib_name)
-    except Exception as ex:
-        print("Error: Failed to import BEJ encoder/decoder library:", rde_lib_name)
-        print("Error: Exception type: {0}, message: {1}".format(ex.__class__.__name__, str(ex)))
-        sys.exit(1)
 
     # default location of schema files
     schema_test_dir = 'test/schema'
@@ -211,7 +198,7 @@ if __name__ == '__main__':
                     entity = m.group(1) + '.' + m.group(1)
 
                 try:
-                    schema_dictionary = rde_dictionary_module.generate_schema_dictionary(
+                    schema_dictionary = dictionary.generate_schema_dictionary(
                         'local',
                         [schema_test_dir + '/metadata'],
                         [schema_test_dir + '/json-schema'],
@@ -254,7 +241,7 @@ if __name__ == '__main__':
     # Generate the annotation dictionary
     print('Generating annotation dictionary...')
     try:
-        annotation_dictionary = rde_dictionary_module.generate_annotation_schema_dictionary(
+        annotation_dictionary = dictionary.generate_annotation_schema_dictionary(
             [schema_test_dir + '/metadata'],
             [schema_test_dir + '/json-schema'],
             'v1_0_0'
@@ -266,7 +253,7 @@ if __name__ == '__main__':
                   len(annotation_dictionary.dictionary_byte_array))
             with open('annotation.bin', 'wb') as annotaton_bin:
                 annotaton_bin.write(bytearray(annotation_dictionary.dictionary_byte_array))
-            rde_dictionary_module.print_binary_dictionary(annotation_dictionary.dictionary_byte_array)
+            dictionary.print_binary_dictionary(annotation_dictionary.dictionary_byte_array)
 
     except Exception as ex:
         print("Error: Could not generate JSON schema dictionary for schema annotation")
@@ -276,7 +263,7 @@ if __name__ == '__main__':
     # Generate the error schema dictionary
     print('Generating error schema dictionary...')
     try:
-        error_schema_dictionary = rde_dictionary_module.generate_error_schema_dictionary(
+        error_schema_dictionary = dictionary.generate_error_schema_dictionary(
             [schema_test_dir + '/metadata'],
             [schema_test_dir + '/json-schema']
         )
@@ -287,24 +274,25 @@ if __name__ == '__main__':
                   len(error_schema_dictionary.dictionary_byte_array))
             with open('error.bin', 'wb') as error_bin:
                 error_bin.write(bytearray(error_schema_dictionary.dictionary_byte_array))
-            rde_dictionary_module.print_binary_dictionary(error_schema_dictionary.dictionary_byte_array)
+            dictionary.print_binary_dictionary(error_schema_dictionary.dictionary_byte_array)
 
         # Run the encode/decode
         bej_stream = io.BytesIO()
 
         json_to_encode = json.load(open('test/error.json'))
-        encode_success, pdr_map = bej_module.bej_encode(
+        encode_success, pdr_map = encode.bej_encode(
                                         bej_stream,
                                         json_to_encode,
                                         error_schema_dictionary.dictionary_byte_array,
-                                        annotation_dictionary.dictionary_byte_array
+                                        annotation_dictionary.dictionary_byte_array,
+                                        verbose=True
                                     )
         assert encode_success,'Encode failure'
         encoded_bytes = bej_stream.getvalue()
-        bej_module.print_encode_summary(json_to_encode, encoded_bytes)
+        encode.print_encode_summary(json_to_encode, encoded_bytes)
 
         decode_stream = io.StringIO()
-        decode_success = bej_module.bej_decode(
+        decode_success = decode.bej_decode(
                                         decode_stream,
                                         io.BytesIO(bytes(encoded_bytes)),
                                         error_schema_dictionary.dictionary_byte_array,
@@ -324,13 +312,14 @@ if __name__ == '__main__':
     except Exception as ex:
         print("Error: Could not validate error schema dictionary")
         print("Error: Exception type: {0}, message: {1}".format(ex.__class__.__name__, str(ex)))
+        traceback.print_exc()
         exit(1)
 
     # Generate the major schema dictionaries
     for major_schema in MAJOR_SCHEMA_DICTIONARY_LIST:
 
         try:
-            schema_dictionary = rde_dictionary_module.generate_schema_dictionary(
+            schema_dictionary = dictionary.generate_schema_dictionary(
                 'local',
                 major_schema.csdl_directories.replace('$', schema_test_dir).split(),
                 major_schema.json_schema_directories.replace('$', schema_test_dir).split(),
@@ -346,7 +335,7 @@ if __name__ == '__main__':
                       len(schema_dictionary.dictionary_byte_array))
                 with open(major_schema.dictionary_filename, 'wb') as dictionary_bin:
                     dictionary_bin.write(bytearray(schema_dictionary.dictionary_byte_array))
-                rde_dictionary_module.print_binary_dictionary(schema_dictionary.dictionary_byte_array)
+                dictionary.print_binary_dictionary(schema_dictionary.dictionary_byte_array)
 
         except Exception as ex:
             print("Error: Could not generate JSON schema dictionary for schema:", major_schema.schema_filename)
@@ -357,11 +346,11 @@ if __name__ == '__main__':
         bej_stream = io.BytesIO()
 
         json_to_encode = json.load(open(major_schema.input_encode_filename))
-        encode_success, pdr_map = bej_module.bej_encode(
+        encode_success, pdr_map = encode.bej_encode(
                                         bej_stream,
                                         json_to_encode,
                                         schema_dictionary.dictionary_byte_array,
-                                        annotation_dictionary.dictionary_byte_array
+                                        annotation_dictionary.dictionary_byte_array, True
                                     )
 
         # build the deferred binding strings from the pdr_map
@@ -371,10 +360,10 @@ if __name__ == '__main__':
 
         assert encode_success,'Encode failure'
         encoded_bytes = bej_stream.getvalue()
-        bej_module.print_encode_summary(json_to_encode, encoded_bytes)
+        encode.print_encode_summary(json_to_encode, encoded_bytes)
 
         decode_stream = io.StringIO()
-        decode_success = bej_module.bej_decode(
+        decode_success = decode.bej_decode(
                                         decode_stream,
                                         io.BytesIO(bytes(encoded_bytes)),
                                         schema_dictionary.dictionary_byte_array,
