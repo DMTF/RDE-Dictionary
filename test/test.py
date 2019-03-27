@@ -16,6 +16,9 @@ sys.path.append('./')
 from rdebej import dictionary
 from rdebej import encode, decode
 
+
+COPYRIGHT = 'Copyright (c) 2018 DMTF'
+
 TestSpecification = namedtuple('TestSpecification', 'csdl_directories '
                                                     'json_schema_directories '
                                                     'schema_filename '
@@ -164,12 +167,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--test_bej", help="test only BEJ", action="store_true")
     parser.add_argument("--schema_source", help="source for schema files", type=str, required=False)
+    parser.add_argument("--git_tag", help="git repo tag", type=str, required=False)
     parser.add_argument("--delete_schema_dir", help="cleanup the schema directories", action="store_true")
     parser.add_argument("--save_dictionaries", help="location to store dictionaries", type=str, required=False)
 
     args = parser.parse_args()
-
-
 
     # default location of schema files
     schema_test_dir = 'test/schema'
@@ -179,7 +181,12 @@ if __name__ == '__main__':
         # we support only git repos from the master branch
         if re.search('.*\.git$', args.schema_source):
             schema_test_dir = 'tmp-schema'
-            repo = cloneFrom(args.schema_source, schema_test_dir, 'master', ['metadata', 'json-schema'])
+            branch = 'master'
+            if args.git_tag:
+                branch = args.git_tag
+            repo = cloneFrom(args.schema_source, schema_test_dir, branch, ['metadata', 'json-schema'])
+            if not repo:
+                exit(1)
         else: # standard directory
             schema_test_dir = args.schema_source
 
@@ -189,11 +196,12 @@ if __name__ == '__main__':
     if not args.test_bej:
         # go thru every csdl and attempt creating a dictionary
         skip_list = []
-        copyright = 'Copyright (c) 2018 DMTF'
+
         for filename in os.listdir(schema_test_dir + '/metadata'):
             if filename not in skip_list:
                 # strip out the _v1.xml
                 m = re.compile('(.*)_v1.xml').match(filename)
+                entity = ''
                 if m:
                     entity = m.group(1) + '.' + m.group(1)
 
@@ -208,7 +216,7 @@ if __name__ == '__main__':
                         None,
                         None,
                         None,
-                        copyright
+                        COPYRIGHT
                     )
 
                     if schema_dictionary and schema_dictionary.dictionary and schema_dictionary.json_dictionary:
@@ -217,8 +225,8 @@ if __name__ == '__main__':
                               'Url:', json.loads(schema_dictionary.json_dictionary)['schema_url'])
                         # verify copyright
                         assert(bytearray(schema_dictionary.dictionary_byte_array[
-                                         len(schema_dictionary.dictionary_byte_array) - len(copyright) - 1:
-                                         len(schema_dictionary.dictionary_byte_array)-1]).decode('utf-8') == copyright)
+                                         len(schema_dictionary.dictionary_byte_array) - len(COPYRIGHT) - 1:
+                                         len(schema_dictionary.dictionary_byte_array)-1]).decode('utf-8') == COPYRIGHT)
                         if args.save_dictionaries:
                             dir_to_save = args.save_dictionaries
                             if not os.path.exists(dir_to_save):
@@ -240,6 +248,7 @@ if __name__ == '__main__':
 
     # Generate the annotation dictionary
     print('Generating annotation dictionary...')
+    annotation_dictionary = None
     try:
         annotation_dictionary = dictionary.generate_annotation_schema_dictionary(
             [schema_test_dir + '/metadata'],
@@ -251,7 +260,12 @@ if __name__ == '__main__':
                 and annotation_dictionary.dictionary_byte_array and annotation_dictionary.json_dictionary:
             print('Entries:', len(annotation_dictionary.dictionary), 'Size:',
                   len(annotation_dictionary.dictionary_byte_array))
-            with open('annotation.bin', 'wb') as annotaton_bin:
+
+            dir_to_save = './'
+            if args.save_dictionaries:
+                dir_to_save = args.save_dictionaries
+
+            with open(dir_to_save + '//' + 'annotation.dict', 'wb') as annotaton_bin:
                 annotaton_bin.write(bytearray(annotation_dictionary.dictionary_byte_array))
             dictionary.print_binary_dictionary(annotation_dictionary.dictionary_byte_array)
 
@@ -262,6 +276,7 @@ if __name__ == '__main__':
 
     # Generate the error schema dictionary
     print('Generating error schema dictionary...')
+    error_schema_dictionary = None
     try:
         error_schema_dictionary = dictionary.generate_error_schema_dictionary(
             [schema_test_dir + '/metadata'],
@@ -272,7 +287,12 @@ if __name__ == '__main__':
                 and error_schema_dictionary.dictionary_byte_array and error_schema_dictionary.json_dictionary:
             print('Entries:', len(error_schema_dictionary.dictionary), 'Size:',
                   len(error_schema_dictionary.dictionary_byte_array))
-            with open('error.bin', 'wb') as error_bin:
+
+            dir_to_save = './'
+            if args.save_dictionaries:
+                dir_to_save = args.save_dictionaries
+
+            with open(dir_to_save + '//' + 'error.dict', 'wb') as error_bin:
                 error_bin.write(bytearray(error_schema_dictionary.dictionary_byte_array))
             dictionary.print_binary_dictionary(error_schema_dictionary.dictionary_byte_array)
 
@@ -317,7 +337,7 @@ if __name__ == '__main__':
 
     # Generate the major schema dictionaries
     for major_schema in MAJOR_SCHEMA_DICTIONARY_LIST:
-
+        schema_dictionary = None
         try:
             schema_dictionary = dictionary.generate_schema_dictionary(
                 'local',
@@ -358,7 +378,7 @@ if __name__ == '__main__':
         for url, pdr_num in pdr_map.items():
             deferred_binding_strings['%L' + str(pdr_num)] = url
 
-        assert encode_success,'Encode failure'
+        assert encode_success, 'Encode failure'
         encoded_bytes = bej_stream.getvalue()
         encode.print_encode_summary(json_to_encode, encoded_bytes)
 
@@ -370,7 +390,7 @@ if __name__ == '__main__':
                                         annotation_dictionary.dictionary_byte_array,
                                         error_schema_dictionary, pdr_map, deferred_binding_strings
                                     )
-        assert decode_success,'Decode failure'
+        assert decode_success, 'Decode failure'
 
         decode_file = decode_stream.getvalue()
 
@@ -383,10 +403,11 @@ if __name__ == '__main__':
         os.remove(major_schema.dictionary_filename)
 
     # cleanup
-    os.remove('annotation.bin')
-    os.remove('error.bin')
-
     if delete_schema_test_dir:
         shutil.rmtree(schema_test_dir, onerror=onerror)
+
+    if not args.save_dictionaries:
+        os.remove('annotation.dict')
+        os.remove('error.dict')
 
     exit(code=0)
