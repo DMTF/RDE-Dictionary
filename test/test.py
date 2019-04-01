@@ -6,7 +6,7 @@ from collections import namedtuple
 import importlib
 import sys
 import argparse
-from .utils import *
+from utils import *
 import shutil
 import stat
 import traceback

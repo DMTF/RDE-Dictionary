@@ -9,8 +9,8 @@ import shutil
 import os
 from behave import register_type
 
-sys.path.append('..')
-import utils
+sys.path.append('./test')
+from utils import *
 
 
 # Cardinality support for numbers in parse
@@ -91,7 +91,7 @@ def schema_source_git(context, **kwargs):
 
     # fill the schema dir with schema from the source
     if re.search('.*\.git$', context.schema_source):
-        repo = utils.cloneFrom(context.schema_source, context.schema_dir, context.schema_branch,
+        repo = cloneFrom(context.schema_source, context.schema_dir, context.schema_branch,
                                ['metadata', 'json-schema'])
         assert repo, "Could not fetch repo"
 
@@ -111,4 +111,4 @@ def before_tag(context, tag):
 
 def after_tag(context, tag):
     if tag == 'fixture.source.git':
-        shutil.rmtree(context.schema_dir, onerror=utils.onerror)
+        shutil.rmtree(context.schema_dir, onerror=onerror)
