@@ -1170,9 +1170,9 @@ def generate_byte_array(dictionary, version, is_truncated, copyright):
 
     # DictionaryFlags
     if is_truncated:
-        binary_data.append(0x00)
-    else:
         binary_data.append(0x01)
+    else:
+        binary_data.append(0x00)
 
     binary_data.extend(len(dictionary).to_bytes(2, 'little', signed=False))  # EntryCount
     binary_data.extend(version.to_bytes(4, 'little', signed=False))  # SchemaVersion
