@@ -14,5 +14,5 @@ install:
    
 script:
    - pipenv run python -u test/test.py
-   - pipenv run behave -D schema_source=https://github.com/DMTF/Redfish.git -D branch=2018.3 -D schema_dir=tmp_schema -D dictionary_dir=tmp_dict test/sfeatures
+   - pipenv run behave -D schema_source=https://github.com/DMTF/Redfish.git -D branch=2018.3 -D schema_dir=tmp_schema -D dictionary_dir=tmp_dict test/features
    - test/test_cli.sh
