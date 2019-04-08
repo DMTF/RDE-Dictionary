@@ -13,6 +13,6 @@ install:
    
    
 script:
-   - pipenv run python -u test/test.py
+   - pipenv run python -u test/test.py --schema_source=https://github.com/DMTF/Redfish.git --git_tag=2018.3
    - pipenv run behave -D schema_sources="[{'source':'git', 'repo':'https://github.com/DMTF/Redfish.git', 'branch':'2018.3', 'schema_dir':'tmp_schema', 'csdl_dir':'metadata', 'json_schema_dir':'json-schema'}]" test/features
    - test/test_cli.sh
