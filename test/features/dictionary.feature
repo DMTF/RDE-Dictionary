@@ -1,4 +1,4 @@
-@fixture.source.git
+@fixture.schema_source
 Feature: The dictionary is generated with the correct format
 
     Scenario Outline: Dictionary headers are encoded correctly

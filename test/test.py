@@ -107,7 +107,7 @@ MAJOR_SCHEMA_DICTIONARY_LIST = [
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--test_bej", help="test only BEJ", action="store_true")
-    parser.add_argument("--schema_source", help="source for schema files", type=str, required=False)
+    parser.add_argument("--schema_source", help="source for schema files", type=str, required=True)
     parser.add_argument("--git_tag", help="git repo tag", type=str, required=False)
     parser.add_argument("--delete_schema_dir", help="cleanup the schema directories", action="store_true")
     parser.add_argument("--save_dictionaries", help="location to store dictionaries", type=str, required=False)

@@ -80,35 +80,43 @@ type_dict = {
 }
 register_type(**type_dict)
 
+# schema_sources:
+#    schema_source (git, local)
+#        schema_dir
+#            csdl_sub_dir
+#            json_sub_dir
+# -D schema_sources=[
+#    {"git", "http://ip/repo.git", "schema_dir", "metadata", "json-schema"},
+#    {"local", "schema_dir", "metadata", "json-schema"}
+#    ]
 
 @fixture
-def schema_source_git(context, **kwargs):
+def schema_source(context, **kwargs):
     # -- SETUP-FIXTURE PART:
-    context.schema_source = context.config.userdata['schema_source']
-    context.schema_branch = context.config.userdata['branch']
-    context.schema_dir = os.getcwd() + '/' + context.config.userdata['schema_dir']
-    context.dictionary_dir = context.config.userdata['dictionary_dir']
+    schema_sources = eval(context.config.userdata['schema_sources'])
+    context.csdl_dirs = []
+    context.json_schema_dirs = []
+    context.dirs_to_cleanup = []
+    for schema_source in schema_sources:
+        if schema_source['source'] == 'git':
+            # fill the schema dir with schema from the source
+            if re.search('.*\.git$', schema_source['repo']):
+                repo = cloneFrom(schema_source['repo'], schema_source['schema_dir'], schema_source['branch'],
+                                 [schema_source['csdl_dir'], schema_source['json_schema_dir']])
+                assert repo, "Could not fetch repo"
+                context.dirs_to_cleanup.append(schema_source['schema_dir'])
 
-    # fill the schema dir with schema from the source
-    if re.search('.*\.git$', context.schema_source):
-        repo = cloneFrom(context.schema_source, context.schema_dir, context.schema_branch,
-                               ['metadata', 'json-schema'])
-        assert repo, "Could not fetch repo"
+        context.csdl_dirs.append(schema_source['schema_dir'] + '//' + schema_source['csdl_dir'])
+        context.json_schema_dirs.append(schema_source['schema_dir'] + '//' + schema_source['json_schema_dir'])
 
-
-@fixture
-def schema_source_local(context, **kwargs):
-    context.schema_dir = os.getcwd() + '/' + context.config.userdata['schema_dir']
-    context.dictionary_dir = context.config.userdata['dictionary_dir']
 
 
 def before_tag(context, tag):
-    if tag == 'fixture.source.git':
-        use_fixture(schema_source_git, context)
-    elif tag == 'fixture.source.local':
-        use_fixture(schema_source_local, context)
+    if tag == 'fixture.schema_source':
+        use_fixture(schema_source, context)
 
 
 def after_tag(context, tag):
-    if tag == 'fixture.source.git':
-        shutil.rmtree(context.schema_dir, onerror=onerror)
+    if tag == 'fixture.schema_source':
+        for dir_to_cleanup in context.dirs_to_cleanup:
+            shutil.rmtree(dir_to_cleanup, onerror=onerror)
