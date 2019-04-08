@@ -860,20 +860,17 @@ def find_schema_url(json_schema_dirs, namespace, version, entity):
         if os.path.isfile(os.path.join(json_schema_dir, unversioned_schema_filename)):
             with open(os.path.join(json_schema_dir, unversioned_schema_filename)) as file:
                 json_schema = json.load(file)
+
+            if version == '' and '$id' in json_schema:  # this is an un-versioned. We just use the '$id'
+                return json_schema['$id']
+
             if 'anyOf' in json_schema['definitions'][entity]:
                 list_of_refs = json_schema['definitions'][entity]['anyOf']
                 for ref in list_of_refs:
                     if '$ref' in ref:
                         ref_namespace, ref_version, ref_entity = get_ref_parts(ref['$ref'])
 
-                        if version == '':  # this is an un-versioned. We just use the url of the first $ref we find
-                            url = ref['$ref']
-                            url = url.replace(ref_namespace, namespace)
-                            url = url.replace(ref_entity, entity)
-                            url = url.replace('.'+ref_version, '')
-                            return url
-
-                        elif namespace == ref_namespace and entity == ref_entity:  # versioned namespace
+                        if namespace == ref_namespace and entity == ref_entity:  # versioned namespace
                             if version == ref_version:
                                 return ref['$ref']
                             else:

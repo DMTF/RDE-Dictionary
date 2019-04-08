@@ -3,9 +3,12 @@ import re
 import os
 import sys
 from ctypes import *
-
+import io
+import json
 #sys.path.append('../..')
 import rdebej.dictionary
+import rdebej.encode
+import rdebej.decode
 
 
 class DictionaryHeader(LittleEndianStructure):
@@ -24,13 +27,19 @@ class DictionaryHeader(LittleEndianStructure):
 def step_impl(context, Schema, Entity):
     context.Schema = Schema
     context.Entity = Entity
-    assert os.path.isfile(context.schema_dir + '/metadata/' + Schema), \
-        "Could not find %s" % (context.schema_dir + '/metadata/' + Schema)
+    is_found = False
+    for dir in context.csdl_dirs:
+        if os.path.isfile(dir + '//' + Schema):
+            is_found = True
+
+    assert is_found, "Could not find %s" % (Schema)
 
 
 @given('a list of schema files')
 def step_impl(context):
-    context.schemas = os.listdir(context.schema_dir + '/metadata/')
+    context.schemas = []
+    for dir in context.csdl_dirs:
+        context.schemas += os.listdir(dir)
     assert context.schemas and len(context.schemas) > 0
 
 
@@ -38,8 +47,8 @@ def step_impl(context):
 def step_impl(context):
     dict = rdebej.dictionary.generate_schema_dictionary(
         'local',
-        [context.schema_dir + '/metadata/'],
-        [context.schema_dir + '/json-schema/'],
+        context.csdl_dirs,
+        context.json_schema_dirs,
         context.Entity, context.Schema,
         oem_entities=None,
         oem_schema_file_names=None,
@@ -86,3 +95,47 @@ def step_impl(context):
                 And the dictionary header shall have the SchemaVersion greater than 0x00
                 And the dictionary header shall have the DictionarySize greater than 0x00
                 ''' % (filename, entity))
+
+
+@then('the following JSON is encoded using the dictionary successfully')
+def step_impl(context):
+    bej_stream = io.BytesIO()
+    context.json_to_encode = json.loads(context.text)
+
+    context.annotation_dictionary = rdebej.dictionary.generate_annotation_schema_dictionary(
+        context.csdl_dirs,
+        context.json_schema_dirs,
+        'v1_0_0'
+    )
+
+    encode_success, pdr_map = rdebej.encode.bej_encode(bej_stream, context.json_to_encode,
+                                                       context.dictionary.dictionary_byte_array,
+                                                       context.annotation_dictionary.dictionary_byte_array,
+                                                       verbose=True)
+
+    assert encode_success, 'Encode failure'
+
+    context.bej_encoded_bytes = bej_stream.getvalue()
+    context.pdr_map = pdr_map
+
+
+@then('the BEJ can be successfully decoded back to JSON')
+def step_impl(context):
+
+    # build the deferred binding strings from the pdr_map
+    deferred_binding_strings = {}
+    for url, pdr_num in context.pdr_map.items():
+        deferred_binding_strings['%L' + str(pdr_num)] = url
+
+    decode_stream = io.StringIO()
+    decode_success = rdebej.decode.bej_decode(
+        decode_stream,
+        io.BytesIO(bytes(context.bej_encoded_bytes)),
+        context.dictionary.dictionary_byte_array,
+        context.annotation_dictionary.dictionary_byte_array,
+        [], context.pdr_map, deferred_binding_strings
+        )
+
+    assert decode_success, 'Decode failure'
+    decode_file = decode_stream.getvalue()
+    assert json.loads(decode_file) == context.json_to_encode, 'Mismatch in original JSON and decoded JSON'
