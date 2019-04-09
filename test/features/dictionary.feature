@@ -3,13 +3,14 @@ Feature: The dictionary is generated with the correct format
 
     Scenario Outline: Dictionary headers are encoded correctly
         Given a CSDL schema file <Schema> and entity <Entity>
-        When the dictionary is generated
+        When the dictionary is generated with Copyright set to Copyright (c) 2018 DMTF
         Then the dictionary header shall have the VersionTag equal to 0x00
         And the dictionary header shall have the DictionaryFlags equal to 0x00
         And the dictionary header shall have the EntryCount greater than 0x00
         And the dictionary header shall have the SchemaVersion greater than 0x00
         And the dictionary header shall have the SchemaVersion not equal to 0xFFFFFFFF
         And the dictionary header shall have the DictionarySize greater than 0x00
+        And the dictionary shall have the Copyright set to Copyright (c) 2018 DMTF
 
         Examples:
             | Schema                | Entity                        |
