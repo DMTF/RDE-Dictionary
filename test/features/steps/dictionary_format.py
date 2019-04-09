@@ -43,8 +43,8 @@ def step_impl(context):
     assert context.schemas and len(context.schemas) > 0
 
 
-@when('the dictionary is generated')
-def step_impl(context):
+@when('the dictionary is generated with Copyright set to {Copyright}')
+def step_impl(context, Copyright):
     dict = rdebej.dictionary.generate_schema_dictionary(
         'local',
         context.csdl_dirs,
@@ -54,7 +54,7 @@ def step_impl(context):
         oem_schema_file_names=None,
         profile=None,
         schema_url=None,
-        copyright=None)
+        copyright=Copyright)
 
     assert dict.dictionary, "Could not generate dictionary for %s:%s" % (context.Schema, context.Entity)
     assert dict.dictionary_byte_array, "Could not generate byte array dictionary for %s:%s" % (context.Schema, context.Entity)
@@ -88,12 +88,13 @@ def step_impl(context):
 
             context.execute_steps(u'''
                 Given a CSDL schema file %s and entity %s
-                When the dictionary is generated
+                When the dictionary is generated with Copyright set to Copyright (c) 2018 DMTF
                 Then the dictionary header shall have the VersionTag equal to 0x00
                 And the dictionary header shall have the DictionaryFlags equal to 0x00
                 And the dictionary header shall have the EntryCount greater than 0x00
                 And the dictionary header shall have the SchemaVersion greater than 0x00
                 And the dictionary header shall have the DictionarySize greater than 0x00
+                And the dictionary shall have the Copyright set to Copyright (c) 2018 DMTF                
                 ''' % (filename, entity))
 
 
@@ -121,7 +122,6 @@ def step_impl(context):
 
 @then('the BEJ can be successfully decoded back to JSON')
 def step_impl(context):
-
     # build the deferred binding strings from the pdr_map
     deferred_binding_strings = {}
     for url, pdr_num in context.pdr_map.items():
@@ -139,3 +139,11 @@ def step_impl(context):
     assert decode_success, 'Decode failure'
     decode_file = decode_stream.getvalue()
     assert json.loads(decode_file) == context.json_to_encode, 'Mismatch in original JSON and decoded JSON'
+
+
+@then('the dictionary shall have the Copyright set to {Copyright}')
+def step_impl(context, Copyright):
+    copyright_bytes = bytearray(context.dictionary.dictionary_byte_array[
+                                len(context.dictionary.dictionary_byte_array) - len(Copyright) - 1 : -1])
+    assert copyright_bytes.decode('utf-8') == Copyright, \
+        "Actual %s, Expected %s" % (copyright_bytes.decode('utf-8'), Copyright)

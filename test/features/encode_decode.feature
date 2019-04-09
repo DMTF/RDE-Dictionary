@@ -3,7 +3,7 @@ Feature: The dictionary can be used to encode/decode BEJ
 
     Scenario: Encoding JSON into BEJ using dictionaries
         Given a CSDL schema file Storage_v1.xml and entity Storage.Storage
-        When the dictionary is generated
+        When the dictionary is generated with Copyright set to Copyright (c) 2018 DMTF
         Then the following JSON is encoded using the dictionary successfully
             """
             {
@@ -86,7 +86,7 @@ Feature: The dictionary can be used to encode/decode BEJ
 
     Scenario: Encoding large JSON into BEJ using dictionaries
         Given a CSDL schema file Storage_v1.xml and entity Storage.Storage
-        When the dictionary is generated
+        When the dictionary is generated with Copyright set to Copyright (c) 2018 DMTF
         Then the following JSON is encoded using the dictionary successfully
             """
             {
