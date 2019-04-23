@@ -550,15 +550,17 @@ def get_base_type(child):
         m = re.compile('(.*)\.(\w*)').match(child.get('BaseType'))
         base_namespace = m.group(1)
         base_entity_name = m.group(2)
-        try:
-            return includeNamespaces[base_namespace].xpath(
-                'child::edm:EntityType[@Name=\'%s\'] | child::edm:ComplexType[@Name=\'%s\']' % (base_entity_name,
-                                                                                                base_entity_name),
-                namespaces=ODATA_ALL_NAMESPACES)[0]
-        except:
-            if verbose:
-                print(base_namespace, base_entity_name)
-            sys.exit()
+
+        assert base_namespace in includeNamespaces, \
+            "Could not find base namespace %s, source line %d" % (base_namespace, child.sourceline)
+        base_types = includeNamespaces[base_namespace].xpath(
+            'child::edm:EntityType[@Name=\'%s\'] | child::edm:ComplexType[@Name=\'%s\']' % (base_entity_name,
+                                                                                            base_entity_name),
+            namespaces=ODATA_ALL_NAMESPACES)
+        if len(base_types) == 1:
+            return base_types[0]
+        assert False, "Could not find base type %s, source line %d" % (child.get('BaseType'), child.sourceline)
+
 
 def is_parent_abstract(entity_type):
     base_entity = get_base_type(entity_type)
@@ -578,8 +580,12 @@ def find_element_from_type(type):
 
     # TODO assert here instead of returning None to let users know that all referenced schema files are not available
     if namespace in includeNamespaces:
-        return includeNamespaces[namespace].xpath('child::edm:*[@Name=\'%s\']' % entity_name,
-                                                  namespaces=ODATA_ALL_NAMESPACES)[0]
+        elements = includeNamespaces[namespace].xpath('child::edm:*[@Name=\'%s\']' % entity_name,
+                                           namespaces=ODATA_ALL_NAMESPACES)
+        if len(elements) >= 1:
+            return elements[0]
+        assert False, "Could not find %s" % (type)
+
     return None
 
 
