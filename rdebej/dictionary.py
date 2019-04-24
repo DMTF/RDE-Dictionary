@@ -10,7 +10,6 @@ Brief : This file contains the definitions and functionalities for generating
 """
 
 from lxml import etree
-import argparse
 import json
 import re
 import os.path
@@ -18,13 +17,12 @@ from operator import itemgetter
 import pprint
 from tabulate import tabulate
 import urllib.request
-import sys
-from collections import Counter
 from collections import namedtuple
 from copy import deepcopy
 import binascii
 import glob
 import collections
+from ._internal_utils import *
 
 # OData types
 ODATA_ENUM_TYPE = '{http://docs.oasis-open.org/odata/ns/edm}EnumType'
@@ -675,7 +673,7 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity, entity_offset
 
 
 def generate_json_dictionary(json_schema_dirs, dictionary, dictionary_byte_array, entity):
-    stream = DictionaryByteArrayStream(dictionary_byte_array)
+    stream = DictionaryByteArrayStreamSimple(dictionary_byte_array)
 
     # skip the version-tag, dictionary flags and entries to get to the version
     stream.get_int(1)  # ver-tag
@@ -710,12 +708,9 @@ def generate_json_dictionary(json_schema_dirs, dictionary, dictionary_byte_array
 
 def print_dictionary_summary(dictionary, dictionary_byte_array):
     print("Total Entries:", len(dictionary))
-    print("Fixed size consumed (bytes):", dictionary_binary_header_size() + dictionary_binary_entry_size() * len(dictionary))
-    # calculate size of free form property names:
-    total_field_string_size = 0
-    for item in dictionary:
-        total_field_string_size = total_field_string_size + len(item[DICTIONARY_ENTRY_FIELD_STRING])
-    print("Field string size consumed (bytes):", total_field_string_size)
+    fixed_size = dictionary_binary_header_size() + dictionary_binary_entry_size() * len(dictionary)
+    print("Fixed size consumed (bytes):", fixed_size)
+    print("Field string size consumed (bytes):", len(dictionary_byte_array) - fixed_size)
     print('Total size (bytes):', len(dictionary_byte_array))
     print('Signature:', hex(binascii.crc32(bytes(dictionary_byte_array))))
 
@@ -1083,11 +1078,11 @@ def build_requirements(obj, required_properties):
 def dictionary_binary_header_size():
     version_tag_size = 1
     dictionary_flags_size = 1
-    schema_version_size = 4
     entry_count_size = 2
+    schema_version_size = 4
     dictionary_size_size = 4
 
-    return version_tag_size + dictionary_flags_size + schema_version_size + entry_count_size + dictionary_size_size
+    return version_tag_size + dictionary_flags_size + entry_count_size + schema_version_size + dictionary_size_size
 
 
 def dictionary_binary_entry_size():
@@ -1254,7 +1249,7 @@ def get_int_from_byte_array(byte_array, start_index, size):
     return int.from_bytes(byte_array[start_index:start_index+size], 'little'), start_index + size
 
 
-class DictionaryByteArrayStream:
+class DictionaryByteArrayStreamSimple:
     def __init__(self, byte_array):
         self._byte_array = byte_array
         self._current_index = 0
@@ -1269,7 +1264,7 @@ class DictionaryByteArrayStream:
 
 
 def print_binary_dictionary(byte_array):
-    stream = DictionaryByteArrayStream(byte_array)
+    stream = DictionaryByteArrayStreamSimple(byte_array)
 
     # print header
     print('VersionTag: ', stream.get_int(1))
