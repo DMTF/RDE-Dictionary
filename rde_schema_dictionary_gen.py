@@ -79,6 +79,7 @@ if __name__ == '__main__':
         sys.exit()
 
     # Generate the schema dictionary.
+    schema_dictionary = None
     if args.source == 'local':
         schema_dictionary = generate_schema_dictionary(args.source, args.csdlSchemaDirectories,
                                                        args.jsonSchemaDirectories, args.entity,
@@ -99,7 +100,7 @@ if __name__ == '__main__':
                                                              args.jsonSchemaDirectories, args.copyright)
 
     # Print table data.
-    if schema_dictionary.dictionary:
+    if schema_dictionary is not None and schema_dictionary.dictionary:
         if not silent:
             print_table_data(
                           [["Row", "Sequence#", "Format", "Flags", "Field String", "Child Count", "Offset"]]
