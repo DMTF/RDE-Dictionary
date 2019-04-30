@@ -21,6 +21,20 @@ To install the required packages, use the command:
 To upgrade already installed packages, use the command:
 `pip install --upgrade <package name>`
 
+## Schema Requirements
+The following lists the schema requirements to generate an RDE binary dictionary:
+#### MAJOR, EVENT and ERROR Schema Classes
+  - CSDL schema files are required for the specific entity and all its dependent types.
+  - For ERROR,  the RedfishError_v1.xml CSDL schema file is used.
+
+#### ANNOTATION Schema Class
+  - A redfish-payload-annotations.vX_Y_Z.json JSON schema file is required.
+  - CSDL schemas are required for any dependent entities that the payload annotation JSON schema may refer to.
+      - For example, the payload annotation @Message.ExtendedInfo refers to the Message entity type and hence will require the CSDL schema for it (Message_v1.xml).
+
+#### OEM Schema Classes
+   - CSDL schemas of all OEM entities are required.
+
 ## Usage 
 ```
 usage: rde_schema_dictionary_gen.py [-h] [--verbose] [--silent]
