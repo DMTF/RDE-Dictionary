@@ -994,48 +994,20 @@ def generate_annotation_dictionary(annotation_version, json_schema_dirs, entity_
     return annotation_dictionary
 
 
-def truncate_entity_repo(entity_repo, entity, required_properties, is_truncated, enum_key = ""):
-    """Truncate the entity repository baseed on the required_properties dictionary."""
-    if entity in entity_repo:
-        if entity_repo[entity][ENTITY_REPO_TUPLE_TYPE_INDEX] == 'Set':
-            # The entity type is 'Set'.
-            # Recursively search for each member in the property list of the entity in the required
-            # properties dictionary. If the property does not exist in the required properties dictionary,
-            # remove it from the entity repo.
-            for property in reversed(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
-                is_required = False
-                if property[ENTITY_REPO_ENTRY_PROPERTY_NAME] in required_properties:
-                    is_required = True
-                    truncate_entity_repo(entity_repo, property[ENTITY_REPO_ENTRY_REFERENCE], required_properties,
-                                         is_truncated, property[ENTITY_REPO_ENTRY_PROPERTY_NAME])
-                if is_required == False:
-                    entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].remove(property)
+def truncate_entity_repo(entity_repo, required_properties, is_truncated, enum_key = ""):
+    """Truncate the entity repository based on the required_properties dictionary."""
+
+    for req_entity, req_values in required_properties.items():
+        if req_entity in entity_repo:
+            for property in reversed(entity_repo[req_entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
+                if property[ENTITY_REPO_ENTRY_PROPERTY_NAME] not in req_values:
+                    entity_repo[req_entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].remove(property)
                     is_truncated = True
-        if entity_repo[entity][ENTITY_REPO_TUPLE_TYPE_INDEX] == 'Enum':
-            # The entity type is 'Enum'.
-            # No recursion is necessary, but the enum list must be trimmed such that it is a union of
-            # all valid values of all properties that use this enum.
 
-            # First, create an untruncated reference version of the entity if it does not exist and
-            # clear the 'real' entity which will be used to generate the dictionary.
-            untruncated_entity = entity + ".Untruncated"
-            if untruncated_entity not in entity_repo:
-                entity_repo[untruncated_entity] = deepcopy(entity_repo[entity])
-                entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].clear()
-            # If the required property does not have an specified list of values, assume that all enum
-            # values are valid.
-            add_all = True if len(required_properties[enum_key]) == 0 else False
-            if not add_all:
-                is_truncated = True
-            # Traverse the untrunctaed entity entry. If the entry exists in the required properties value
-            # list, add it to the 'real' entity.
-            for enum_val in entity_repo[untruncated_entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]:
-                if add_all or enum_val[ENTITY_REPO_ENTRY_PROPERTY_NAME] in required_properties[enum_key]:
-                    if enum_val not in entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]:
-                        entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].append(enum_val)
+    return
 
 
-def process_profile(json_profile, entity):
+def process_profile(json_profile, entity, entity_repo):
     """Validate that the provided profile has a 'Resources' key and the target entity.
 
     If the provided profile is valid, create a dictionary of required properties used to truncate the entity repo.
@@ -1048,11 +1020,11 @@ def process_profile(json_profile, entity):
             json_resource = json_profile["Resources"][profile_key]
     if json_resource:
         required_properties = {}
-        build_requirements(json_resource, required_properties)
+        build_requirements(json_resource, required_properties, entity, entity_repo)
     return required_properties
 
 
-def build_requirements(obj, required_properties):
+def build_requirements(obj, required_properties, entity, entity_repo):
     """Generate a required_properties dictionary used to truncate the entity repository.
 
     The required_properties dictionary is generated in a way such that every property specified in the
@@ -1062,21 +1034,29 @@ def build_requirements(obj, required_properties):
     For properties that are not enums, or that do not have valid enums specified, the value in the
     key-value pair is an empty list.
     """
-    for key in obj:
-        if key == 'PropertyRequirements':
-            for prop in obj[key].items():
-                enum_values = []
-                for child in prop[1]:
-                    if child == 'Values':
-                        enum_values = prop[1][child]
-                if prop[0] in required_properties:
-                    full_enum_values = required_properties[prop[0]] + [val for val in enum_values if val not in required_properties[prop[0]]]
-                    required_properties[prop[0]] = full_enum_values
-                else:
-                    required_properties[prop[0]] = enum_values
-    for val in obj.values():
-        if isinstance(val, dict):
-            build_requirements(val, required_properties)
+
+    if 'PropertyRequirements' in obj:
+        if entity not in required_properties:
+            required_properties[entity] = []
+
+        # go thru each required property and fetch the type
+        for prop in obj['PropertyRequirements'].items():
+            if isinstance(prop[1], dict):  # prop[0] is the prop name, prop[1] is the prop requirements
+                # find the entry in the entity_repo that corresponds to this property
+                for entity_repo_prop in entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]:
+                    if prop[0] == entity_repo_prop[ENTITY_REPO_ENTRY_PROPERTY_NAME]:
+                        required_properties[entity].append(prop[0])
+                        if entity_repo_prop[ENTITY_REPO_ENTRY_TYPE] == 'Set' or \
+                                entity_repo_prop[ENTITY_REPO_ENTRY_TYPE] == 'Enum' or \
+                                entity_repo_prop[ENTITY_REPO_ENTRY_TYPE] == 'Array' :
+                            build_requirements(prop[1], required_properties,
+                                               entity_repo_prop[ENTITY_REPO_ENTRY_REFERENCE], entity_repo)
+    if 'Values' in obj: # For enums
+        if entity not in required_properties:
+            required_properties[entity] = []
+
+        for val in obj['Values']:
+            required_properties[entity].append(val)
 
 
 def dictionary_binary_header_size():
@@ -1484,9 +1464,9 @@ def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
                 with open(profile) as file:
                     json_profile = json.load(file)
                 # Fix up the profile
-                profile_requirements = process_profile(json_profile, entity)
+                profile_requirements = process_profile(json_profile, entity, entity_repo)
                 if profile_requirements:
-                    truncate_entity_repo(entity_repo, entity, profile_requirements, is_truncated)
+                    truncate_entity_repo(entity_repo, profile_requirements, is_truncated)
                 else:
                     if verbose:
                         print('Error parsing profile')
