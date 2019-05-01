@@ -14,7 +14,6 @@
          "@odata.id": "/redfish/v1/Systems/1/Storage/1#/StorageControllers/0",
          "@odata.type": "#Storage.v1_3_0.StorageController",
          "MemberId": "0",
-         "Name": "SAS RAID Controller",
          "Status": {
             "State": "Enabled",
             "Health": "OK"
