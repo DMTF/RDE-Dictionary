@@ -1,3 +1,8 @@
+#! /usr/bin/python3
+# Copyright Notice:
+# Copyright 2018-2019 DMTF. All rights reserved.
+# License: BSD 3-Clause License. For full text see link: https://github.com/DMTF/RDE-Dictionary/blob/master/LICENSE.md
+
 from behave import *
 from behave import fixture, use_fixture
 import parse

@@ -1,9 +1,11 @@
 [![Build Status](https://travis-ci.com/DMTF/RDE-Dictionary.svg?token=N3SGKEhVyuVurvnzDK4g&branch=master)](https://travis-ci.com/DMTF/RDE-Dictionary)
 
+Copyright 2018-2019 DMTF. All rights reserved.
 
 # rde-dictionary-builder
 
 ## Pre Requisites:
+
 Minimum Python Version: 3.6
 
 Minimum Redfish Schema Version: 1.6 (2018.3)
@@ -22,20 +24,26 @@ To upgrade already installed packages, use the command:
 `pip install --upgrade <package name>`
 
 ## Schema Requirements
+
 The following lists the schema requirements to generate an RDE binary dictionary:
+
 #### MAJOR, EVENT and ERROR Schema Classes
+
   - CSDL schema files are required for the specific entity and all its dependent types.
   - For ERROR,  the RedfishError_v1.xml CSDL schema file is used.
 
 #### ANNOTATION Schema Class
+
   - A redfish-payload-annotations.vX_Y_Z.json JSON schema file is required.
   - CSDL schemas are required for any dependent entities that the payload annotation JSON schema may refer to.
       - For example, the payload annotation @Message.ExtendedInfo refers to the Message entity type and hence will require the CSDL schema for it (Message_v1.xml).
 
 #### OEM Schema Classes
+
    - CSDL schemas of all OEM entities are required.
 
 ## Usage 
+
 ```
 usage: rde_schema_dictionary_gen.py [-h] [--verbose] [--silent]
                                     {local,annotation,error,view} ...
@@ -48,7 +56,9 @@ optional arguments:
   --verbose             increase output verbosity
   --silent              no output prints unless errors
 ```
+
 ### Local Options
+
 ```
 usage: rde_schema_dictionary_gen.py local [-h] -c
                                           [CSDLSCHEMADIRECTORIES [CSDLSCHEMADIRECTORIES ...]]
@@ -76,6 +86,7 @@ optional arguments:
 ```
   
 ### Example
+
 ```
 python rde_schema_dictionary_gen.py local --csdlSchemaDirectories test/schema/metadata  test/schema/oem-csdl --jsonSchemaDirectories test/schema/json-schema --schemaFilename Drive_v1.xml --entity Drive.Drive --outputFile drive.bin
 +-------+-------------+----------+------------------------------------+-------------------------------+---------------+----------+
@@ -180,6 +191,7 @@ Signature: 0xf93eb944
 ```
 
 ### Example for annotations
+
 ```
 python rde_schema_dictionary_gen.py annotation --csdlSchemaDirectories test/schema/metadata --jsonSchemaDirectories test/schema/json-schema -v v1_0_0 --outputFile annotation.bin
 
@@ -250,6 +262,7 @@ Signature: 0xd9a12d6b
 ```
 
 ### Example for OEM extensions
+
 ```
 python rde_schema_dictionary_gen.py local --csdlSchemaDirectories test/schema/metadata  test/schema/oem-csdl --jsonSchemaDirectories test/schema/json-schema --schemaFilename Drive_v1.xml --entity Drive.Drive --oemSchemaFilenames OEM1DriveExt_v1.xml OEM2DriveExt_v1.xml --oemEntities OEM1=OEM1DriveExt.OEM1DriveExt OEM2=OEM2DriveExt.OEM2DriveExt --outputFile drive.bin
 
@@ -324,6 +337,7 @@ Signature: 0xd3639e74
 ```
 
 ### Example generating a truncated dictionary using a profile
+
 Use the following example_profile.json to truncate the dictionary.
 ```
 {
@@ -529,6 +543,7 @@ Signature: 0x1ae1ca48
 # pldm-bej-encoder-decoder
 
 ## Example Encoding JSON into PLDM BEJ
+
 1. Create schema and annotation dictionaries for the schema that the input JSON object conforms to (this examples uses the Redfish Drive schema):
 ```
 python rde_schema_dictionary_gen.py local --csdlSchemaDirectories test/schema/metadata  test/schema/oem-csdl --jsonSchemaDirectories test/schema/json-schema --schemaFilename Drive_v1.xml --entity Drive.Drive --oemSchemaFilenames OEM1DriveExt_v1.xml OEM2DriveExt_v1.xml --oemEntities OEM1=OEM1DriveExt.OEM1DriveExt OEM2=OEM2DriveExt.OEM2DriveExt --outputFile drive.bin
@@ -697,6 +712,7 @@ Compression ratio(%): 46.83458134785569
 ```
 
 ## Example Decoding PLDM BEJ into JSON
+
 ```
 python pldm_bej_encoder_decoder.py decode --schemaDictionary drive.bin --annotationDictionary annotation.bin --bejEncodedFile drive_bej.bin --pdrMapFile pdr.txt
 

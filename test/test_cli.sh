@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright Notice:
+# Copyright 2018-2019 DMTF. All rights reserved.
+# License: BSD 3-Clause License. For full text see link: https://github.com/DMTF/RDE-Dictionary/blob/master/LICENSE.md
 
 pipenv run python rde_schema_dictionary_gen.py local --csdlSchemaDirectories tmp-schema/metadata  test/schema/oem-csdl --jsonSchemaDirectories tmp-schema/json-schema --schemaFilename Drive_v1.xml --entity Drive.Drive --outputFile drive.bin
 pipenv run python rde_schema_dictionary_gen.py local --csdlSchemaDirectories tmp-schema/metadata  test/schema/oem-csdl --jsonSchemaDirectories tmp-schema/json-schema --schemaFilename Drive_v1.xml --entity Drive.Drive --outputFile drive.bin -f drive.json
