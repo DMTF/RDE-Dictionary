@@ -99,6 +99,7 @@ def step_impl(context):
                 And the dictionary header shall have the EntryCount greater than 0x00
                 And the dictionary header shall have the SchemaVersion greater than 0x00
                 And the dictionary header shall have the DictionarySize greater than 0x00
+                And the dictionary size is correct
                 And the dictionary shall have the Copyright set to Copyright (c) 2018 DMTF                
                 ''' % (filename, entity))
 
@@ -152,3 +153,10 @@ def step_impl(context, Copyright):
                                 len(context.dictionary.dictionary_byte_array) - len(Copyright) - 1 : -1])
     assert copyright_bytes.decode('utf-8') == Copyright, \
         "Actual %s, Expected %s" % (copyright_bytes.decode('utf-8'), Copyright)
+
+
+@then('the dictionary size is correct')
+def step_imp(context):
+    header = DictionaryHeader.from_buffer_copy(bytearray(context.dictionary.dictionary_byte_array))
+    assert getattr(header, 'DictionarySize') == len(context.dictionary.dictionary_byte_array), \
+        "Actual %s, Expected %s" % (getattr(header, 'DictionarySize'), len(context.dictionary.dictionary_byte_array))

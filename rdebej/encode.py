@@ -4,12 +4,11 @@
 # License: BSD 3-Clause License. For full text see link: https://github.com/DMTF/RDE-Dictionary/blob/master/LICENSE.md
 
 """
-PLDM BEJ Encoder/Decoder
+PLDM BEJ Encoder
 
-File : pldm_bej_encoder_decoder.py
+File : encode.py
 
-Brief : This file allows encoding a JSON file to PLDM Binary encoded JSON (BEJ) and
-        decoding a PLDM BEJ file back into JSON.
+Brief : This file defines API to encode a JSON file to PLDM Binary encoded JSON (BEJ)
 """
 
 import json
@@ -124,12 +123,6 @@ def bej_pack_nnint(stream, value, num_bytes):
     return num_bytes_packed
 
 
-def bej_unpack_nnint(stream):
-    # read num bytes
-    num_bytes = int.from_bytes(stream.read(1), 'little')
-    return int.from_bytes(stream.read(num_bytes), 'little')
-
-
 def bej_pack_sfl(stream, seq_num, format, length, format_flags=0):
     # pack seq num as nnint
     num_bytes = bej_pack_nnint(stream, seq_num, 0)
@@ -142,19 +135,6 @@ def bej_pack_sfl(stream, seq_num, format, length, format_flags=0):
     num_bytes += bej_pack_nnint(stream, length, 0)
 
     return num_bytes
-
-
-def bej_unpack_sfl(stream):
-    # unpack seq
-    seq = bej_unpack_nnint(stream)
-
-    # unpack format
-    format = int.from_bytes(stream.read(1), 'little') >> 4
-
-    # unpack length
-    length = bej_unpack_nnint(stream)
-
-    return seq, format, length
 
 
 def bej_pack_sflv_string(stream, seq_num, str, is_deferred_binding=False):
@@ -178,14 +158,6 @@ def bej_decode_sequence_number(seq):
     return seq >> 1, seq & 0x01
 
 
-def bej_unpack_sflv_string(stream):
-    seq, format, length = bej_unpack_sfl(stream)
-    val = stream.read(length).decode()
-
-    # the last byte in a string decode is the null terminator, remove that and return
-    return bej_decode_sequence_number(seq), val[:length-1]
-
-
 def bej_pack_sflv_boolean(stream, seq_num, val):
     num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_BOOLEAN, 1)
 
@@ -196,18 +168,6 @@ def bej_pack_sflv_boolean(stream, seq_num, val):
         num_bytes_packed += stream.write(0x00.to_bytes(1, 'little'))
 
     return num_bytes_packed
-
-
-def bej_unpack_sflv_boolean(stream):
-    seq, format, length = bej_unpack_sfl(stream)
-    val = stream.read(length)
-
-    bool_val = 'false'
-    if val[0] == 0x01:
-        bool_val = 'true'
-
-    # the last byte in a string decode is the null terminator, remove that and return
-    return bej_decode_sequence_number(seq), bool_val
 
 
 def bej_pack_sflv_integer(stream, seq_num, value):
@@ -232,24 +192,11 @@ def bej_pack_sflv_integer(stream, seq_num, value):
     return num_bytes_packed
 
 
-def bej_unpack_sflv_integer(stream):
-    seq, format, length = bej_unpack_sfl(stream)
-    int_array = stream.read(length)
-    return bej_decode_sequence_number(seq), int.from_bytes(int_array, 'little', signed=True)
-
-
 def bej_pack_sflv_enum(stream, seq_num, value):
     num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_ENUM, 1)
     num_bytes_packed += bej_pack_nnint(stream, value, 0)
 
     return num_bytes_packed
-
-
-def bej_unpack_sflv_enum(stream):
-    seq, format, length = bej_unpack_sfl(stream)
-    value = bej_unpack_nnint(stream)
-
-    return bej_decode_sequence_number(seq), value
 
 
 def bej_pack_sflv_resource_link(stream, seq_num, pdr):
@@ -258,17 +205,6 @@ def bej_pack_sflv_resource_link(stream, seq_num, pdr):
 
     return num_bytes_packed
 
-
-def bej_unpack_sflv_resource_link(stream):
-    seq, format, length = bej_unpack_sfl(stream)
-    value = bej_unpack_nnint(stream)
-
-    return bej_decode_sequence_number(seq), value
-
-
-def bej_unpack_sflv_null(stream):
-    seq, format, length = bej_unpack_sfl(stream)
-    return bej_decode_sequence_number(seq)
 
 # Globals for bej set - Warning! not thread safe
 bej_set_stream_stack = []
@@ -338,103 +274,7 @@ def bej_pack_property_annotation_done(stream, prop_seq):
     return num_bytes_packed + len(stream.getvalue())
 
 
-def bej_unpack_set_start(stream):
-    '''
-    :param stream:
-    :return: [sequence_num, selector], length, count
-    '''
-
-    # move the stream to point to the first element in the set
-    seq, format, length = bej_unpack_sfl(stream)
-
-    # unpack the count
-    count = bej_unpack_nnint(stream)
-
-    return bej_decode_sequence_number(seq), length, count
-
-
-def bej_unpack_array_start(stream):
-    '''
-    :param stream:
-    :return: [sequence_num, selector], length, count
-    '''
-
-    # move the stream to point to the first element in the array
-    seq, format, length = bej_unpack_sfl(stream)
-
-    # unpack the count
-    count = bej_unpack_nnint(stream)
-
-    return bej_decode_sequence_number(seq), length, count
-
-
-def bej_unpack_property_annotation_start(stream):
-    '''
-    :param stream:
-    :return:
-    '''
-
-    # move the stream to point to the first element in the set
-    seq, format, length = bej_unpack_sfl(stream)
-    prop_seq, selector = bej_decode_sequence_number(seq)
-    annot_seq, selector = bej_decode_sequence_number(bej_sequenceof(stream))
-    return annot_seq, prop_seq
-
-
-    pass
-
-
-def bej_unpack_array_done():
-    pass
-
-
-def bej_unpack_property_annotation_done():
-    pass
-
-
-def bej_typeof(stream):
-    current_pos = stream.tell()
-
-    # skip seq
-    bej_unpack_nnint(stream)
-
-    format = int.from_bytes(stream.read(1), 'little') >> 4
-    stream.seek(current_pos, os.SEEK_SET)
-
-    return format
-
-
-def bej_is_deferred_binding(stream):
-    current_pos = stream.tell()
-
-    # skip seq
-    bej_unpack_nnint(stream)
-
-    is_deferred_binding = int.from_bytes(stream.read(1), 'little') & 0x01 == 0x01
-    stream.seek(current_pos, os.SEEK_SET)
-
-    return is_deferred_binding
-
-
-def bej_sequenceof(stream):
-    current_pos = stream.tell()
-
-    # get seq
-    seq = bej_unpack_nnint(stream)
-
-    stream.seek(current_pos, os.SEEK_SET)
-
-    return seq
-
-
 current_available_pdr = 0
-
-
-def get_link_from_pdr_map(pdr, pdr_map):
-    for key, value in pdr_map.items():
-        if value == pdr:
-            return key
-    return ''
 
 
 def load_dictionary_subset_by_key_name(schema_dict, offset, child_count):
