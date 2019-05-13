@@ -6,9 +6,9 @@
 """
 RDE Dictionary Builder
 
-File : rde-dictionary-builder.py
+File : dictionary.py
 
-Brief : This file contains the definitions and functionalities for generating
+Brief : This file contains the definitions and functions for generating
         a RDE schema dictionary from a set of standard Redfish CSDL and JSON Schema
         files
 """
@@ -1158,7 +1158,8 @@ def generate_byte_array(dictionary, version, is_truncated, copyright):
 
     binary_data.extend(len(dictionary).to_bytes(2, 'little', signed=False))  # EntryCount
     binary_data.extend(version.to_bytes(4, 'little', signed=False))  # SchemaVersion
-    binary_data.extend(dictionary_binary_size(dictionary, copyright).to_bytes(4, 'little', signed=False))  # DictionarySize
+    offset_to_size = len(binary_data)
+    binary_data.extend(int(0).to_bytes(4, 'little', signed=False))  # DictionarySize
 
     # track property name offsets, this is initialized to the first property name
     name_offset = dictionary_binary_header_size() + (len(dictionary) * dictionary_binary_entry_size())
@@ -1226,6 +1227,7 @@ def generate_byte_array(dictionary, version, is_truncated, copyright):
     else:
         binary_data.append(0x00)  # set the copyright length to zero
 
+    binary_data[offset_to_size: offset_to_size + 4] = len(binary_data).to_bytes(4, 'little', signed=False)
     return binary_data
 
 

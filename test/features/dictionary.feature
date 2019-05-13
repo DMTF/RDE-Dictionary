@@ -10,6 +10,7 @@ Feature: The dictionary is generated with the correct format
         And the dictionary header shall have the SchemaVersion greater than 0x00
         And the dictionary header shall have the SchemaVersion not equal to 0xFFFFFFFF
         And the dictionary header shall have the DictionarySize greater than 0x00
+        And the dictionary size is correct
         And the dictionary shall have the Copyright set to Copyright (c) 2018 DMTF
 
         Examples:

@@ -4,12 +4,11 @@
 # License: BSD 3-Clause License. For full text see link: https://github.com/DMTF/RDE-Dictionary/blob/master/LICENSE.md
 
 """
-PLDM BEJ Encoder/Decoder
+PLDM BEJ Decoder
 
-File : pldm_bej_encoder_decoder.py
+File : decode.py
 
-Brief : This file allows encoding a JSON file to PLDM Binary encoded JSON (BEJ) and
-        decoding a PLDM BEJ file back into JSON.
+Brief : This file defines APIs to decode a PLDM Binary encoded JSON (BEJ) to JSON
 """
 
 import os
