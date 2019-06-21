@@ -38,7 +38,7 @@ Feature: The dictionary can be used to encode/decode BEJ
                      "Model": "Consorty RAID Controller XYZ",
                      "SerialNumber": "PEYHC0XRH400NE",
                      "PartNumber": "7334534",
-                     "SpeedGbps": 12,
+                     "SpeedGbps": 12.0,
                      "FirmwareVersion": "1.00",
                      "SupportedControllerProtocols": [
                         "PCIe"

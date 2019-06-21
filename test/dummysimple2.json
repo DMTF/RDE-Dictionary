@@ -1,6 +1,7 @@
 {
     "Id": "Dummy ID",
     "SampleIntegerProperty": -5,
+    "SampleRealProperty": -5576.90001,
     "SampleEnabledProperty": false,
     "ChildArrayProperty": [
         {
