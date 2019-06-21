@@ -68,6 +68,27 @@ def bej_unpack_sflv_integer(stream):
     return bej_decode_sequence_number(seq), int.from_bytes(int_array, 'little', signed=True)
 
 
+def bej_unpack_sflv_real(stream):
+    seq, format, length = bej_unpack_sfl(stream)
+    length_of_whole = bej_unpack_nnint(stream)
+    whole_array = stream.read(length_of_whole)
+    whole = int.from_bytes(whole_array, 'little', signed=True)
+    leading_zero_count = bej_unpack_nnint(stream)
+    fract = bej_unpack_nnint(stream)
+    length_of_exponent = bej_unpack_nnint(stream)
+    exponent = 0
+    if length_of_exponent > 0:
+        exponent_array = stream.read(length_of_exponent)
+        exponent =  int.from_bytes(exponent_array, 'little', signed=True)
+
+    real_str = str(whole) + '.'
+    for i in range(0, leading_zero_count):
+       real_str += '0'
+    real_str += str(fract)
+    real_str += 'e' + str(exponent)
+    return bej_decode_sequence_number(seq), float(real_str)
+
+
 def bej_unpack_sflv_enum(stream):
     seq, format, length = bej_unpack_sfl(stream)
     value = bej_unpack_nnint(stream)
@@ -313,6 +334,13 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
 
         elif format == BEJ_FORMAT_INTEGER:
             [seq, selector], value = bej_unpack_sflv_integer(input_stream)
+            if add_name:
+                bej_decode_name(annot_dict, seq, selector, entries_by_seq, entries_by_seq_selector, output_stream)
+
+            output_stream.write(str(value))
+
+        elif format == BEJ_FORMAT_REAL:
+            [seq, selector], value = bej_unpack_sflv_real(input_stream)
             if add_name:
                 bej_decode_name(annot_dict, seq, selector, entries_by_seq, entries_by_seq_selector, output_stream)
 

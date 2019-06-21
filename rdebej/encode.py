@@ -17,6 +17,7 @@ import os
 import re
 import string
 from ._internal_utils import *
+from math import *
 
 
 NUM_BYTES_FOR_INTEGER = 8
@@ -170,24 +171,84 @@ def bej_pack_sflv_boolean(stream, seq_num, val):
     return num_bytes_packed
 
 
-def bej_pack_sflv_integer(stream, seq_num, value):
+def get_num_bytes_and_padding(value):
     num_bytes_for_value, msb = find_num_bytes_and_msb(value)
-
     # determine if padding is required to guarantee 2's complement
     is_padding_required = False
     if value > 0 and (msb & 0x80):
         # add one more byte to the msb to guarantee highest MSb is zero
         is_padding_required = True
 
-    num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_INTEGER,
-                 num_bytes_for_value+1 if is_padding_required else num_bytes_for_value)
+    return num_bytes_for_value, is_padding_required
 
+
+def bej_pack_v_integer(stream, value, num_bytes_for_value, is_padding_required):
     # pack the value
-    num_bytes_packed += stream.write(twos_complement(value, 64).to_bytes(8, 'little')[:num_bytes_for_value])
+    num_bytes_packed = stream.write(twos_complement(value, 64).to_bytes(8, 'little')[:num_bytes_for_value])
     # add padding if needed
     if is_padding_required:
         pad = 0
         num_bytes_packed += stream.write(pad.to_bytes(1, 'little'))
+
+    return num_bytes_packed
+
+
+def bej_pack_sflv_integer(stream, seq_num, value):
+    num_bytes_for_value, is_padding_required = get_num_bytes_and_padding(value)
+
+    num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_INTEGER,
+                                    num_bytes_for_value+1 if is_padding_required else num_bytes_for_value)
+
+    # pack the value
+    num_bytes_packed += bej_pack_v_integer(stream, value, num_bytes_for_value, is_padding_required)
+
+    return num_bytes_packed
+
+
+def split_whole_frac_leading_zeros(value, precision):
+    # split into whole, fract (exponent not supported for now)
+    value_parts = str(value).split('.')
+    whole = int(value_parts[0])
+    frac = ''
+    if len(value_parts) > 1:
+        frac = value_parts[1]
+
+    num_leading_zeros = 0
+    while frac and frac[0] == '0':
+        num_leading_zeros += 1
+        frac = frac[1:]
+
+    frac_val = 0
+    if frac != '':
+        frac_val = int(frac[0:precision])
+
+    return whole, frac_val, num_leading_zeros
+
+
+# Packs a float as a SFLV
+# TODO: Does not support exponent
+def bej_pack_sflv_real(stream, seq_num, value, precision=16):
+    whole, frac, num_leading_zeros = split_whole_frac_leading_zeros(value, precision)
+
+    num_bytes_for_whole, is_padding_required = get_num_bytes_and_padding(whole)
+    num_bytes_to_pack_for_whole = num_bytes_for_whole+1 if is_padding_required else num_bytes_for_whole
+
+    num_bytes_for_frac = num_bytes_for_unsigned_integer(frac)
+
+    total_length = (2 +  # length of whole (nnint)
+                    num_bytes_to_pack_for_whole +  # whole (bejInteger)
+                    1 + num_bytes_for_unsigned_integer(num_leading_zeros) +  # leading zero count for fract (nnint)
+                    1 + num_bytes_for_frac +  # fract (nnint)
+                    2) # length of exp (nnint)
+
+    num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_REAL, total_length)
+
+    # pack the value
+    num_bytes_packed += bej_pack_nnint(stream, num_bytes_to_pack_for_whole, 0)
+    num_bytes_packed += bej_pack_v_integer(stream, whole, num_bytes_for_whole, is_padding_required)
+    num_bytes_packed += bej_pack_nnint(stream, num_leading_zeros, 0)
+    num_bytes_packed += bej_pack_nnint(stream, frac, 0)
+    num_bytes_packed += bej_pack_nnint(stream, 0, 0)  # Length of exp == 0
 
     return num_bytes_packed
 
@@ -343,6 +404,9 @@ def bej_encode_sflv(output_stream, schema_dict, annot_dict, dict_to_use, dict_en
 
     elif format == BEJ_FORMAT_INTEGER:
         bej_pack_sflv_integer(output_stream, seq, json_value)
+
+    elif format == BEJ_FORMAT_REAL:
+        bej_pack_sflv_real(output_stream, seq, json_value)
 
     elif format == BEJ_FORMAT_BOOLEAN:
         bej_pack_sflv_boolean(output_stream, seq, json_value)

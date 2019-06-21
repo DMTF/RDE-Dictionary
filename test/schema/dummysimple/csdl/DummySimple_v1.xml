@@ -32,6 +32,10 @@
           <Annotation Term="OData.Permissions" EnumMember="OData.Permission/ReadWrite"/>
           <Annotation Term="OData.Description" String=""/>
         </Property>
+        <Property Name="SampleRealProperty" Type="Edm.Decimal">
+          <Annotation Term="OData.Permissions" EnumMember="OData.Permission/ReadWrite"/>
+          <Annotation Term="OData.Description" String=""/>
+        </Property>
         <Property Name="SampleEnabledProperty" Type="Edm.Boolean">
           <Annotation Term="OData.Permissions" EnumMember="OData.Permission/ReadWrite"/>
           <Annotation Term="OData.Description" String=""/>

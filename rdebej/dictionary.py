@@ -109,10 +109,12 @@ def get_primitive_type(property_type):
         primitive_type = m.group(1)
         if primitive_type == "DateTimeOffset" or primitive_type == "Duration" or primitive_type == "TimeOfDay" or primitive_type == "Guid":
             primitive_type = 'String'
-        if ((primitive_type == "SByte") or (primitive_type == "Int16") or (primitive_type == "Int32") or
-                (primitive_type == "Int64") or (primitive_type == "Decimal")):
+        elif ((primitive_type == "SByte") or (primitive_type == "Int16") or (primitive_type == "Int32") or
+              (primitive_type == "Int64")):
             primitive_type = 'Integer'
-        if primitive_type == "PrimitiveType":
+        elif primitive_type == "Decimal":
+            primitive_type = 'Real'
+        elif primitive_type == "PrimitiveType":
             primitive_type = 'Choice'
         return primitive_type
     return ''
@@ -779,6 +781,8 @@ def add_odata_annotations(annotation_dictionary, odata_annotation_location):
         if json_format == 'string':
             bej_format = 'String'
         elif json_format == 'number':
+            bej_format = 'Real'
+        elif json_format == 'integer':
             bej_format = 'Integer'
         elif json_format == 'object':
             # TODO expand object
@@ -902,8 +906,10 @@ def convert_json_type_to_bej_format(k, v, entity_repo):
 
         if json_format == 'string':
             bej_format = 'String'
-        elif json_format == 'number' or json_format == 'integer':
+        elif json_format == 'integer':
             bej_format = 'Integer'
+        elif json_format == 'number':
+            bej_format = 'Real'
         elif json_format == 'object':
             # TODO expand object
             bej_format = 'Set'
@@ -1112,6 +1118,7 @@ bej_format_table = {
     'Integer':       0x03,
     'Enum':          0x04,
     'String':        0x05,
+    'Real':          0x06,
     'Boolean':       0x07,
     'Choice':        0x09,  # bejChoice
     'ResourceLink':  0x0E
