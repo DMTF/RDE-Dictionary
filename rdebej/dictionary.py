@@ -1000,9 +1000,10 @@ def generate_annotation_dictionary(annotation_version, json_schema_dirs, entity_
     return annotation_dictionary
 
 
-def truncate_entity_repo(entity_repo, required_properties, is_truncated, enum_key = ""):
+def truncate_entity_repo(entity_repo, required_properties, enum_key = ""):
     """Truncate the entity repository based on the required_properties dictionary."""
 
+    is_truncated = False
     for req_entity, req_values in required_properties.items():
         if req_entity in entity_repo:
             for property in reversed(entity_repo[req_entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
@@ -1010,7 +1011,7 @@ def truncate_entity_repo(entity_repo, required_properties, is_truncated, enum_ke
                     entity_repo[req_entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].remove(property)
                     is_truncated = True
 
-    return
+    return is_truncated
 
 
 def process_profile(json_profile, entity, entity_repo):
@@ -1475,7 +1476,7 @@ def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
                 # Fix up the profile
                 profile_requirements = process_profile(json_profile, entity, entity_repo)
                 if profile_requirements:
-                    truncate_entity_repo(entity_repo, profile_requirements, is_truncated)
+                    is_truncated = truncate_entity_repo(entity_repo, profile_requirements)
                 else:
                     if verbose:
                         print('Error parsing profile')
@@ -1490,7 +1491,7 @@ def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
                 print(entity_offset_map)
 
         # Generate dictionary_byte_array.
-        dictionary_byte_array = generate_byte_array(dictionary, ver, False, copyright)
+        dictionary_byte_array = generate_byte_array(dictionary, ver, is_truncated, copyright)
 
         # Generate JSON dictionary.
         json_dictionary = generate_json_dictionary(json_schema_dirs, dictionary, dictionary_byte_array, entity)
