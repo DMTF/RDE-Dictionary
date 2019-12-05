@@ -15,6 +15,8 @@ from utils import *
 import shutil
 import stat
 import traceback
+import requests
+import zipfile
 
 sys.path.append('./')
 
@@ -60,8 +62,8 @@ MAJOR_SCHEMA_DICTIONARY_LIST = [
                                     'Copyright (c) 2018 Acme Corp'),
 
                                 TestSpecification(
-                                    '$/metadata test/schema/oem-csdl',
-                                    '$/json-schema',
+                                    '$csdl_dir test/schema/oem-csdl',
+                                    '$json_schema_dir',
                                     'Drive_v1.xml',
                                     'Drive.Drive',
                                     'OEM1DriveExt_v1.xml OEM2DriveExt_v1.xml',
@@ -72,8 +74,8 @@ MAJOR_SCHEMA_DICTIONARY_LIST = [
                                     'Copyright (c) 2018 Acme Corp'),  # encoded bej file
 
                                 TestSpecification(
-                                    '$/metadata',
-                                    '$/json-schema',
+                                    '$csdl_dir',
+                                    '$json_schema_dir',
                                     'Storage_v1.xml',
                                     'Storage.Storage',
                                     '',
@@ -84,8 +86,8 @@ MAJOR_SCHEMA_DICTIONARY_LIST = [
                                     'Copyright (c) 2018 Acme Corp'),
 
                                 TestSpecification(
-                                    '$/metadata',
-                                    '$/json-schema',
+                                    '$csdl_dir',
+                                    '$json_schema_dir',
                                     'Storage_v1.xml',
                                     'Storage.Storage',
                                     '',
@@ -96,8 +98,8 @@ MAJOR_SCHEMA_DICTIONARY_LIST = [
                                     'Copyright (c) 2018 Acme Corp'),
 
                                 TestSpecification(
-                                    '$/metadata',
-                                    '$/json-schema',
+                                    '$csdl_dir',
+                                    '$json_schema_dir',
                                     'Storage_v1.xml',
                                     'Storage.Storage',
                                     '',
@@ -133,17 +135,31 @@ if __name__ == '__main__':
             repo = cloneFrom(args.schema_source, schema_test_dir, branch, ['metadata', 'json-schema'])
             if not repo:
                 exit(1)
+        elif re.search('https://.*\.zip$', args.schema_source):
+            schema_test_dir = 'tmp-schema'
+            r = requests.get(args.schema_source, allow_redirects=True)
+            open('tmp_schema.zip', 'wb').write(r.content)
+            with zipfile.ZipFile('tmp_schema.zip', 'r') as zip_ref:
+                zip_ref.extractall('tmp-schema')
+                schema_test_dir = 'tmp-schema/'+os.listdir('tmp-schema')[0]
         else: # standard directory
             schema_test_dir = args.schema_source
 
     if args.delete_schema_dir:
         delete_schema_test_dir = True
 
+    csdl_dir = schema_test_dir + '/metadata'
+    json_schema_dir = schema_test_dir + '/json-schema'
+    if os.path.isdir(schema_test_dir + '/metadata'):
+        csdl_dir = schema_test_dir + '/metadata'
+    elif os.path.isdir(schema_test_dir + '/csdl'):
+        csdl_dir = schema_test_dir + '/csdl'
+
     if not args.test_bej:
         # go thru every csdl and attempt creating a dictionary
         skip_list = []
 
-        for filename in os.listdir(schema_test_dir + '/metadata'):
+        for filename in os.listdir(csdl_dir):
             if filename not in skip_list:
                 # strip out the _v1.xml
                 m = re.compile('(.*)_v1.xml').match(filename)
@@ -154,8 +170,8 @@ if __name__ == '__main__':
                 try:
                     schema_dictionary = dictionary.generate_schema_dictionary(
                         'local',
-                        [schema_test_dir + '/metadata'],
-                        [schema_test_dir + '/json-schema'],
+                        [csdl_dir],
+                        [json_schema_dir],
                         entity,
                         filename,
                         None,
@@ -195,8 +211,8 @@ if __name__ == '__main__':
     annotation_dictionary = None
     try:
         annotation_dictionary = dictionary.generate_annotation_schema_dictionary(
-            [schema_test_dir + '/metadata'],
-            [schema_test_dir + '/json-schema'],
+            [csdl_dir],
+            [json_schema_dir],
             'v1_0_0'
         )
 
@@ -223,8 +239,8 @@ if __name__ == '__main__':
     error_schema_dictionary = None
     try:
         error_schema_dictionary = dictionary.generate_error_schema_dictionary(
-            [schema_test_dir + '/metadata'],
-            [schema_test_dir + '/json-schema']
+            [csdl_dir],
+            [json_schema_dir]
         )
 
         if error_schema_dictionary and error_schema_dictionary.dictionary \
@@ -283,10 +299,14 @@ if __name__ == '__main__':
     for major_schema in MAJOR_SCHEMA_DICTIONARY_LIST:
         schema_dictionary = None
         try:
+            csdl_dirs = major_schema.csdl_directories.replace('$csdl_dir', csdl_dir)
+            json_schema__dirs = major_schema.json_schema_directories.replace('$json_schema_dir', json_schema_dir)
+
+            print(csdl_dirs)
             schema_dictionary = dictionary.generate_schema_dictionary(
                 'local',
-                major_schema.csdl_directories.replace('$', schema_test_dir).split(),
-                major_schema.json_schema_directories.replace('$', schema_test_dir).split(),
+                csdl_dirs.split(),
+                json_schema__dirs.split(),
                 major_schema.entity,
                 major_schema.schema_filename,
                 major_schema.oem_entities.split(),
