@@ -10,7 +10,7 @@ Minimum Python Version: 3.6
 
 Minimum Redfish Schema Version: 1.6 (2018.3)
 
-Conformance: PLDM for Redfish Device Enablement 1.0.0 draft 5
+Conformance: PLDM for Redfish Device Enablement 1.0.0
 
 The RDE dictionary builder is based on Python 3 and the client system is required to have the Python framework installed before the tool can be installed and executed on the system.  Additionally, the following packages are required to be installed and accessible from the python environment:
 * lxml
