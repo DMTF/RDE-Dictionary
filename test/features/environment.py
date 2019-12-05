@@ -13,6 +13,8 @@ import sys
 import shutil
 import os
 from behave import register_type
+import requests
+import zipfile
 
 sys.path.append('./test')
 from utils import *
@@ -110,9 +112,16 @@ def schema_source(context, **kwargs):
                                  [schema_source['csdl_dir'], schema_source['json_schema_dir']])
                 assert repo, "Could not fetch repo"
                 context.dirs_to_cleanup.append(schema_source['schema_dir'])
+                schema_test_dir = schema_source['schema_dir']
+        elif schema_source['source'] == 'http':
+            r = requests.get(schema_source['url'], allow_redirects=True)
+            open('tmp_schema.zip', 'wb').write(r.content)
+            with zipfile.ZipFile('tmp_schema.zip', 'r') as zip_ref:
+                zip_ref.extractall(schema_source['schema_dir'])
+                schema_test_dir = schema_source['schema_dir'] + '//' + os.listdir(schema_source['schema_dir'])[0]
 
-        context.csdl_dirs.append(schema_source['schema_dir'] + '//' + schema_source['csdl_dir'])
-        context.json_schema_dirs.append(schema_source['schema_dir'] + '//' + schema_source['json_schema_dir'])
+        context.csdl_dirs.append(schema_test_dir + '//' + schema_source['csdl_dir'])
+        context.json_schema_dirs.append(schema_test_dir + '//' + schema_source['json_schema_dir'])
 
 
 
