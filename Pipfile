@@ -10,6 +10,7 @@ behave = "*"
 lxml = "*"
 tabulate = "*"
 GitPython = "*"
+requests = "*"
 
 [requires]
 python_version = "3.6"
