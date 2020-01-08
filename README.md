@@ -84,8 +84,73 @@ optional arguments:
   -d OUTPUTFILE, --outputFile OUTPUTFILE
   -f OUTPUTJSONDICTIONARYFILE, --outputJsonDictionaryFile OUTPUTJSONDICTIONARYFILE
 ```
-  
-### Example
+
+## Quick Start Guide
+The following example illustrates building a dictionary for an XML schema and using the reference BEJ encoder/decoder to encode a JSON payload into BEJ and decoding BEJ back to the JSON.
+
+1. Create a XML schema for the payload. The following XML schema is for a complex type SimpleExample with 1 string property:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<edmx:Edmx xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx" Version="4.0">
+  <edmx:DataServices>
+    <Schema xmlns="http://docs.oasis-open.org/odata/ns/edm" Namespace="SimpleExample.v1_0_0">
+      <EntityType Name="SimpleExample">
+        <Property Name="SampleStringProperty" Type="Edm.String">
+          <Annotation Term="OData.Permissions" EnumMember="OData.Permission/ReadWrite"/>
+        </Property>
+      </EntityType>
+    </Schema>
+  </edmx:DataServices>
+</edmx:Edmx>
+```
+
+2. Generate the dictionary using the python dictionary builder (Example.dict):
+
+<pre>
+$ <b>python rde_schema_dictionary_gen.py local -c ./ -j ./ -s Example_v1.xml -e SimpleExample.SimpleExample -d Example.dict</b>
++-------+-------------+----------+------------------------------------+----------------------+---------------+----------+
+|   Row |   Sequence# | Format   | Flags                              | Field String         |   Child Count | Offset   |
++=======+=============+==========+====================================+======================+===============+==========+
+|     0 |           0 | Set      |                                    | SimpleExample        |             1 | 1        |
++-------+-------------+----------+------------------------------------+----------------------+---------------+----------+
+|     1 |           0 | String   | Nullable=True,Permission=ReadWrite | SampleStringProperty |             0 |          |
++-------+-------------+----------+------------------------------------+----------------------+---------------+----------+
+Total Entries: 2
+Fixed size consumed (bytes): 32
+Field string size consumed (bytes): 36
+Total size (bytes): 68
+Signature: 0x65c44329
+</pre>
+
+3. Feed a sample JSON into the encoder along with the dictionary from above to generate a BEJ encoded file (Example.enc). A hex dump is also generated for the BEJ:
+
+<pre>
+$ <b>python pldm_bej_encoder_decoder.py encode -s Example.dict -a annotation.bin -o Example.enc</b>
+{
+    "SampleStringProperty": "Hello  World"
+}
+^Z
+0X000000: 00 F0 F0 F1 00 00 00 01 00 00 01 14 01 01 01 00 ................
+0X000010: 50 01 0D 48 65 6C 6C 6F 20 20 57 6F 72 6C 64 00 P..Hello..World.
+
+JSON size: 39
+Total encode size: 32
+Compression ratio(%): 17.948717948717952
+</pre>
+
+4. Decode the BEJ to generate the JSON back:
+
+<pre>
+$ <b>python pldm_bej_encoder_decoder.py decode -s Example.dict -a annotation.bin -b Example.enc</b>
+{
+   "SampleStringProperty": "Hello  World"
+}
+</pre>
+
+## Dictionary Builder Examples
+
+### Building a Redfish Schema Dictionary
 
 ```
 python rde_schema_dictionary_gen.py local --csdlSchemaDirectories test/schema/metadata  test/schema/oem-csdl --jsonSchemaDirectories test/schema/json-schema --schemaFilename Drive_v1.xml --entity Drive.Drive --outputFile drive.bin
@@ -190,7 +255,7 @@ Total size (bytes): 3898
 Signature: 0xf93eb944
 ```
 
-### Example for annotations
+### Building the Annotations Dictionary
 
 ```
 python rde_schema_dictionary_gen.py annotation --csdlSchemaDirectories test/schema/metadata --jsonSchemaDirectories test/schema/json-schema -v v1_0_0 --outputFile annotation.bin
@@ -337,7 +402,7 @@ Total size (bytes): 1567
 Signature: 0x28837ee4
 ```
 
-### Example for OEM extensions
+### Building a Redfish Schema Dictionary with OEM extensions
 
 ```
 python rde_schema_dictionary_gen.py local --csdlSchemaDirectories test/schema/metadata  test/schema/oem-csdl --jsonSchemaDirectories test/schema/json-schema --schemaFilename Drive_v1.xml --entity Drive.Drive --oemSchemaFilenames OEM1DriveExt_v1.xml OEM2DriveExt_v1.xml --oemEntities OEM1=OEM1DriveExt.OEM1DriveExt OEM2=OEM2DriveExt.OEM2DriveExt --outputFile drive.bin
@@ -412,7 +477,7 @@ Total size (bytes): 4179
 Signature: 0xd3639e74
 ```
 
-### Example generating a truncated dictionary using a profile
+### Building a Truncated Dictionary using a Redfish Profile
 
 Use the following example_profile.json to truncate the dictionary.
 ```
