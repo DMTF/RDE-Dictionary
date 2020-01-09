@@ -642,6 +642,8 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity, entity_offset
                                    property[PROPERTY_TYPE], property[PROPERTY_FLAGS], property[PROPERTY_FIELD_STRING],
                                    0, property[PROPERTY_OFFSET])
             child_count = child_count + 1
+        if child_count == 0:
+            offset = 0
 
         # If we are here, then this is a new set of entries added to the dictionary. Let's update the entity_offset_map
         # to cache the offsets.
@@ -715,9 +717,11 @@ def generate_json_dictionary(json_schema_dirs, dictionary, dictionary_byte_array
 def print_dictionary_summary(dictionary, dictionary_byte_array):
     print("Total Entries:", len(dictionary))
     fixed_size = dictionary_binary_header_size() + dictionary_binary_entry_size() * len(dictionary)
-    print("Fixed size consumed (bytes):", fixed_size)
-    print("Field string size consumed (bytes):", len(dictionary_byte_array) - fixed_size)
-    print('Total size (bytes):', len(dictionary_byte_array))
+    version = int.from_bytes(dictionary_byte_array[4:8], 'little')
+    print("Fixed size consumed (bytes): {0:d} ({0:#x})".format(fixed_size))
+    print("Field string size consumed (bytes): {0:d} ({0:#x})".format(len(dictionary_byte_array) - fixed_size))
+    print('Total size (bytes): {0:d} ({0:#x})'.format(len(dictionary_byte_array)))
+    print('Version: {0:#X}'.format(version))
     print('Signature:', hex(binascii.crc32(bytes(dictionary_byte_array))))
 
 
