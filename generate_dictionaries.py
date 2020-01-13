@@ -8,8 +8,9 @@ import os
 import json
 import re
 import argparse
+import traceback
 
-sys.path.append('./')
+#sys.path.append('./')
 
 from rdebej import dictionary
 
@@ -29,13 +30,13 @@ def write_map_file(filename, schema_dictionary):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input-csdl", help="source for local CSDL schema files", nargs='+',
+    parser.add_argument('-x', '--input-csdl', help="source directory(s) for local XML CSDL schema files", nargs='+',
                         required=True)
-    parser.add_argument("--input-json-schema", help="source for local JSON schema files", nargs='+',
+    parser.add_argument('-j', '--input-json-schema', help="source directory(s) for local JSON schema files", nargs='+',
                         required=False)
-    parser.add_argument("--config", help="config file for specific user options", required=False)
+    parser.add_argument('-c', '--config', help="config file for specific user options", required=False)
 
-    parser.add_argument("--output", help="The folder(s) to write the RDE dictionary files", nargs='+', required=True)
+    parser.add_argument('-o', '--output', help="The folder(s) to write the RDE dictionary files", nargs='+', required=True)
 
     args = parser.parse_args()
 
@@ -112,6 +113,7 @@ if __name__ == '__main__':
                 except Exception as ex:
                     print("Error: Could not generate RDE dictionary for schema:", filename)
                     print("Error: Exception type: {0}, message: {1}".format(ex.__class__.__name__, str(ex)))
+                    traceback.print_exception(type(ex), ex, ex.__traceback__)
                     sys.exit(1)
 
     # Generate the annotation dictionary
