@@ -42,7 +42,8 @@ The following lists the schema requirements to generate an RDE binary dictionary
 
    - CSDL schemas of all OEM entities are required.
 
-## Usage 
+## Usage (rde_schema_dictionary_gen)
+Use this script to generate a single RDE dictionary for a CSDL schema.
 
 ```
 usage: rde_schema_dictionary_gen.py [-h] [--verbose] [--silent]
@@ -84,6 +85,26 @@ optional arguments:
   -d OUTPUTFILE, --outputFile OUTPUTFILE
   -f OUTPUTJSONDICTIONARYFILE, --outputJsonDictionaryFile OUTPUTJSONDICTIONARYFILE
 ```
+
+## Usage (generate_dictionaries)
+Use the generate_dictionaries script to generate RDE dictionaries for all schema files in a specific folder. This will also generate the annotation dictionary.
+
+```
+usage: generate_dictionaries.py [-h] -x INPUT_CSDL [INPUT_CSDL ...]
+                                [-j INPUT_JSON_SCHEMA [INPUT_JSON_SCHEMA ...]]
+                                [-c CONFIG] -o OUTPUT [OUTPUT ...]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -x INPUT_CSDL [INPUT_CSDL ...], --input-csdl INPUT_CSDL [INPUT_CSDL ...]
+                        source directory(s) for local XML CSDL schema files
+  -j INPUT_JSON_SCHEMA [INPUT_JSON_SCHEMA ...], --input-json-schema INPUT_JSON_SCHEMA [INPUT_JSON_SCHEMA ...]
+                        source directory(s) for local JSON schema files
+  -c CONFIG, --config CONFIG
+                        config file for specific user options
+  -o OUTPUT [OUTPUT ...], --output OUTPUT [OUTPUT ...]
+                        The folder(s) to write the RDE dictionary files
+```                        
 
 ## Quick Start Guide
 The following example illustrates building a dictionary for an XML schema and using the reference BEJ encoder/decoder to encode a JSON payload into BEJ and decoding BEJ back to the JSON.
