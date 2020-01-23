@@ -29,7 +29,21 @@ def write_map_file(filename, schema_dictionary):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description='Generate dictionaries by scanning and parsing xml schema directories',
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog='Example config file: \n' +
+               '{ \n' +
+               '     "Copyright": "Copyright 2014-2020 MyCompany",\n' +
+               '     "DoNotWrite": ["ExcludeFile1_v1.xml", "ExcludeFile2_v1.xml"],\n' +
+               '     "ExplicitEntities": {\n' +
+               '        "AnXMLSchemaFile_v1.xml": {\n' +
+               '           "Namespace.SomeEntity1": "DictionaryForSomeEntity1.bin",\n' +
+               '           "Namespace.SomeEntity2": "DictionaryForSomeEntity2.bin"\n' +
+               '        }\n' +
+               '     }\n' +
+               '}'
+    )
     parser.add_argument('-x', '--input-csdl', help="source directory(s) for local XML CSDL schema files", nargs='+',
                         required=True)
     parser.add_argument('-j', '--input-json-schema', help="source directory(s) for local JSON schema files", nargs='+',
@@ -52,6 +66,7 @@ if __name__ == '__main__':
 
     copyright = ''
     do_not_write = []
+    explicit_entities = {}
     # Read the configuration file
     config_data = {}
     if args.config is not None:
@@ -62,6 +77,8 @@ if __name__ == '__main__':
                     copyright = config_data['Copyright']
                 if 'DoNotWrite' in config_data:
                     do_not_write = config_data['DoNotWrite']
+                if 'ExplicitEntities' in config_data:
+                    explicit_entities = config_data['ExplicitEntities']
         except json.JSONDecodeError:
             print("ERROR: {} contains a malformed JSON object".format(args.config))
             sys.exit(1)
@@ -72,49 +89,58 @@ if __name__ == '__main__':
     for i in range(0, len(schema_dir_csdl)):
         for filename in os.listdir(schema_dir_csdl[i]):
             if filename not in do_not_write:
-                # strip out the _v1.xml
-                m = re.compile('(.*)_v1.xml').match(filename)
-                entity = ''
-                if m:
-                    entity = m.group(1) + '.' + m.group(1)
+                entities = []
+                output_filenames = []
 
-                try:
-                    schema_dictionary = dictionary.generate_schema_dictionary(
-                        'local',
-                        schema_dir_csdl,
-                        schema_dir_json,
-                        entity,
-                        filename,
-                        None,
-                        None,
-                        None,
-                        None,
-                        copyright
-                    )
+                if filename in explicit_entities:
+                    for (k, v) in explicit_entities[filename].items():
+                        entities.append(k)
+                        output_filenames.append(v)
+                else:
+                    # strip out the _v1.xml
+                    m = re.compile('(.*)_v1.xml').match(filename)
+                    if m:
+                        entities.append(m.group(1) + '.' + m.group(1))
+                        output_filenames.append(filename.replace('.xml', ''))
 
-                    if schema_dictionary and schema_dictionary.dictionary and schema_dictionary.json_dictionary:
-                        print(filename, 'Entries:', len(schema_dictionary.dictionary),
-                              'Size:', len(schema_dictionary.dictionary_byte_array),
-                              'Url:', json.loads(schema_dictionary.json_dictionary)['schema_url'])
+                for j in range(0, len(entities)):
+                    try:
+                        schema_dictionary = dictionary.generate_schema_dictionary(
+                            'local',
+                            schema_dir_csdl,
+                            schema_dir_json,
+                            entities[j],
+                            filename,
+                            None,
+                            None,
+                            None,
+                            None,
+                            copyright
+                        )
 
-                        dir_to_save = args.output[i]
+                        if schema_dictionary and schema_dictionary.dictionary and schema_dictionary.json_dictionary:
+                            print(filename, entities[j], 'Entries:', len(schema_dictionary.dictionary),
+                                  'Size:', len(schema_dictionary.dictionary_byte_array),
+                                  'Url:', json.loads(schema_dictionary.json_dictionary)['schema_url'])
 
-                        if not os.path.exists(dir_to_save):
-                            os.makedirs(dir_to_save)
+                            dir_to_save = args.output[i]
 
-                        # save the binary and also dump the ascii version
-                        with open(dir_to_save + '//' + filename.replace('.xml', '.bin'), 'wb') as file:
-                            file.write(bytes(schema_dictionary.dictionary_byte_array))
+                            if not os.path.exists(dir_to_save):
+                                os.makedirs(dir_to_save)
 
-                        write_map_file(dir_to_save + '//' + filename.replace('.xml', '.map'), schema_dictionary)
-                    else:
-                        print(filename, "Missing entities, skipping...")
+                            # save the binary and also dump the ascii version
+                            with open(dir_to_save + '//' + output_filenames[j] + '.bin', 'wb') as file:
+                                file.write(bytes(schema_dictionary.dictionary_byte_array))
 
-                except Exception as ex:
-                    print("Error: Could not generate RDE dictionary for schema:", filename)
-                    print("Error: Exception type: {0}, message: {1}".format(ex.__class__.__name__, str(ex)))
-                    traceback.print_exception(type(ex), ex, ex.__traceback__)
-                    sys.exit(1)
+                            write_map_file(dir_to_save + '//' + output_filenames[j] + '.map', schema_dictionary)
+                        else:
+                            print(filename, "Missing entities, skipping...")
+
+                    except Exception as ex:
+                        print("Error: Could not generate RDE dictionary for schema:", filename)
+                        print("Error: Exception type: {0}, message: {1}".format(ex.__class__.__name__, str(ex)))
+                        traceback.print_exception(type(ex), ex, ex.__traceback__)
+                        sys.exit(1)
 
     # Generate the annotation dictionary
     print('Generating annotation dictionary...')

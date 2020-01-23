@@ -94,6 +94,8 @@ usage: generate_dictionaries.py [-h] -x INPUT_CSDL [INPUT_CSDL ...]
                                 [-j INPUT_JSON_SCHEMA [INPUT_JSON_SCHEMA ...]]
                                 [-c CONFIG] -o OUTPUT [OUTPUT ...]
 
+Generate dictionaries by scanning and parsing xml schema directories
+
 optional arguments:
   -h, --help            show this help message and exit
   -x INPUT_CSDL [INPUT_CSDL ...], --input-csdl INPUT_CSDL [INPUT_CSDL ...]
@@ -104,6 +106,18 @@ optional arguments:
                         config file for specific user options
   -o OUTPUT [OUTPUT ...], --output OUTPUT [OUTPUT ...]
                         The folder(s) to write the RDE dictionary files
+
+Example config file:
+{
+     "Copyright": "Copyright 2014-2020 MyCompany",
+     "DoNotWrite": ["ExcludeFile1_v1.xml", "ExcludeFile2_v1.xml"],
+     "ExplicitEntities": {
+        "AnXMLSchemaFile_v1.xml": {
+           "Namespace.SomeEntity1": "DictionaryForSomeEntity1.bin",
+           "Namespace.SomeEntity2": "DictionaryForSomeEntity2.bin"
+        }
+     }
+}
 ```                        
 
 ## Quick Start Guide
