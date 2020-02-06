@@ -11,6 +11,24 @@
        "State": "Enabled", 
        "Health": "Warning" 
     },
+    "Actions": {
+       "#Drive.SecureErase": {
+          "target": "/redfish/v1/drives/1/Actions/Drive.SecureErase",
+          "title": "Secure Erase a Drive"
+       },
+      "#Drive.Reset": {
+          "target": "/redfish/v1/drives/1/Actions/Drive.Reset",
+          "title": "Reset a Drive",
+          "ResetType@Redfish.AllowableValues": [
+                "On",
+                "ForceOff",
+                "ForceRestart",
+                "Nmi",
+                "ForceOn",
+                "PushPowerButton"
+            ]
+      }
+    },
     "Status@Message.ExtendedInfo": [
         {
             "MessageId": "PredictiveFailure",
