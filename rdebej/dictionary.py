@@ -352,10 +352,18 @@ def add_actions(doc, entity_repo):
             entity_repo[action_entity_type] = ('Set', [])
 
         entity_repo[action_entity_type][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].append(
-            [actionType.get('Name'), 'Set', '', get_qualified_entity_name(actionType)])
+            ['#' + get_namespace(actionType) + '.' + actionType.get('Name'), 'Set', '', get_qualified_entity_name(actionType)])
 
         if get_qualified_entity_name(actionType) not in entity_repo:
             entity_repo[get_qualified_entity_name(actionType)] = ('Set', [])
+
+        # All actions have a target and title
+        entity_repo[get_qualified_entity_name(actionType)][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].extend(
+            [
+                ['target', 'String', 'Nullable=False,Permission=Read', ''],
+                ['title', 'String', 'Nullable=False,Permission=Read', '']
+            ]
+        )
 
         properties = []
 
