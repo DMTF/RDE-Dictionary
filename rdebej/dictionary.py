@@ -930,7 +930,7 @@ def convert_json_type_to_bej_format(k, v, entity_repo):
         elif json_format == 'array':
             bej_format = 'Array'
             child_format, offset = convert_json_type_to_bej_format(k, v['items'], entity_repo)
-			# Setup offset for primitive types to Edm.* so anonymous entries are setup in the dictionary
+            # Setup offset for primitive types to Edm.* so anonymous entries are setup in the dictionary
             if offset == '':
                 if child_format == 'String':
                     offset = 'Edm.String'
