@@ -254,7 +254,8 @@ def bej_pack_sflv_real(stream, seq_num, value, precision=16):
 
 
 def bej_pack_sflv_enum(stream, seq_num, value):
-    num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_ENUM, 1)
+    enum_value_size = num_bytes_for_unsigned_integer(value) + 1 # enum value size as nint
+    num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_ENUM, enum_value_size)
     num_bytes_packed += bej_pack_nnint(stream, value, 0)
 
     return num_bytes_packed
