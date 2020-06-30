@@ -368,7 +368,8 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
             if add_name:
                 bej_decode_name(annot_dict, seq, selector, entries_by_seq, entries_by_seq_selector, output_stream)
 
-            enum_value = bej_decode_enum_value(schema_dict, entries_by_seq[seq], value)
+            dict_to_use = schema_dict if selector is BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA else annot_dict
+            enum_value = bej_decode_enum_value(dict_to_use, entries_by_seq[seq], value)
             output_stream.write('"' + enum_value + '"')
 
         elif format == BEJ_FORMAT_NULL:
