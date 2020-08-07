@@ -50,6 +50,7 @@ DICTIONARY_ENTRY_FORMAT_FLAGS = 3
 DICTIONARY_ENTRY_FIELD_STRING = 4
 DICTIONARY_ENTRY_CHILD_COUNT = 5
 DICTIONARY_ENTRY_OFFSET = 6
+DICTIONARY_ENTRY_EXCERPT = 7
 
 ENTITY_REPO_TUPLE_TYPE_INDEX = 0
 ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX = 1
@@ -66,7 +67,7 @@ includeNamespaces = {} # Dict to build a list of namespaces that will be used to
 verbose = False
 silent = False
 
-EntityOffsetMapTuple = namedtuple('EntityOffsetMapTuple', 'offset offset_to_array')
+EntityOffsetMapTuple = namedtuple('EntityOffsetMapTuple', 'offset offset_to_array count')
 
 
 def get_base_properties(entity_type):
@@ -173,39 +174,62 @@ def get_properties(some_type, path='descendant-or-self::edm:Property | edm:Navig
                                                namespaces=ODATA_ALL_NAMESPACES)))
         is_auto_expand_refs = not is_auto_expand
 
+        excerpt_name = ''
+        excerpt_data = []
+        excerpt_copies = property_element.xpath('child::edm:Annotation[@Term=\'Redfish.ExcerptCopy\']',
+                               namespaces=ODATA_ALL_NAMESPACES)
+        if len(excerpt_copies):
+            excerpt_name = 'ExcerptCopy='
+            excerpt_data = excerpt_copies
+
+        excerpts = property_element.xpath('child::edm:Annotation[@Term=\'Redfish.Excerpt\']',
+                                                namespaces=ODATA_ALL_NAMESPACES)
+        if len(excerpts):
+            excerpt_name = 'Excerpt='
+            excerpt_data = excerpts
+
+        excerpt_copy_only = property_element.xpath('child::edm:Annotation[@Term=\'Redfish.ExcerptCopyOnly\']',
+                                                namespaces=ODATA_ALL_NAMESPACES)
+        if len(excerpt_copy_only):
+            excerpt_name = 'ExcerptCopyOnly'
+            excerpt_data = excerpt_copy_only
+
+        for excerpt in excerpt_data:
+            if excerpt.get("String"):
+                excerpt_name += excerpt.get("String")
+
         primitive_type = get_primitive_type(property_type)
         if primitive_type != '':  # primitive type?
-            properties.append([property_name, primitive_type, property_flags, ''])
+            properties.append([property_name, primitive_type, property_flags, '', excerpt_name])
         else:  # complex type
             complex_type = None
             is_array = re.compile('Collection\((.*?)\)').match(property_type)
             if is_array:
                 if is_auto_expand_refs:
                     # TODO fix references
-                    properties.append([property_name, 'Array', property_flags, 'AutoExpandRef'])
+                    properties.append([property_name, 'Array', property_flags, 'AutoExpandRef', excerpt_name])
                 else:  # AutoExpand or not specified
                     array_type = is_array.group(1)
 
                     if array_type.startswith('Edm.'):  # primitive types
-                        properties.append([property_name, 'Array', property_flags, array_type, ''])
+                        properties.append([property_name, 'Array', property_flags, array_type, '', excerpt_name])
                     else:
                         properties.append([property_name, 'Array', property_flags, strip_version(is_array.group(1)), 'AutoExpand'])
-
             else:
                 complex_type = find_element_from_type(property_type)
 
             if complex_type is not None:
                 if complex_type.tag == ODATA_ENUM_TYPE:
-                    properties.append([property_name, 'Enum', property_flags, strip_version(property_type)])
+                    properties.append([property_name, 'Enum', property_flags, strip_version(property_type), excerpt_name])
                 elif complex_type.tag == ODATA_COMPLEX_TYPE or complex_type.tag == ODATA_ENTITY_TYPE:
-                    if is_auto_expand_refs:
-                        properties.append([property_name, 'Set', property_flags, ''])
+                    if is_auto_expand_refs and excerpt_name == '':
+                        properties.append([property_name, 'Set', property_flags, '', excerpt_name])
                     else:
-                        properties.append([property_name, 'Set', property_flags, strip_version(property_type)])
+                        properties.append([property_name, 'Set', property_flags, strip_version(property_type), excerpt_name])
                 elif complex_type.tag == ODATA_TYPE_DEFINITION:
                     assert(re.compile('Edm\..*').match(complex_type.get('UnderlyingType')))
                     primitive_type = get_primitive_type(complex_type.get('UnderlyingType'))
-                    properties.append([property_name, primitive_type, property_flags, ''])
+                    properties.append([property_name, primitive_type, property_flags, '', excerpt_name])
                 else:
                     if verbose:
                         print(complex_type.tag)
@@ -605,60 +629,83 @@ def print_table_data(data):
     print(tabulate(data, headers="firstrow", tablefmt="grid"))
 
 
-def add_dictionary_row(dictionary, index, seq_num, format, format_flags, field_string, child_count, offset):
-    dictionary.append([index, seq_num, format, format_flags, field_string, child_count, offset])
+def add_dictionary_row(dictionary, index, seq_num, format, format_flags, field_string, child_count, offset, excerpts):
+    dictionary.append([index, seq_num, format, format_flags, field_string, child_count, offset, excerpts])
 
 
 def add_dictionary_entries(schema_dictionary, entity_repo, entity, entity_offset_map, is_parent_array,
-                           anonymous_entry_name=''):
+                           anonymous_entry_name, excerpt_filter):
     if entity in entity_repo:
         entity_type = entity_repo[entity][ENTITY_REPO_TUPLE_TYPE_INDEX]
         start = len(schema_dictionary)
 
+        # for caching purposes with excerpt, we construct the entity name with the excerpt-copy
+        entity_offset_map_index = entity
+        for excerpt in excerpt_filter:
+            entity_offset_map_index += excerpt
+
         # Check to see if dictionary entries for the entity has already been generated and use the cached offsets
         # if yes.
-        if entity in entity_offset_map:
-            offset = entity_offset_map[entity].offset
-            array_offset = entity_offset_map[entity].offset_to_array
+        if entity_offset_map_index in entity_offset_map:
+            offset = entity_offset_map[entity_offset_map_index].offset
+            array_offset = entity_offset_map[entity_offset_map_index].offset_to_array
             if is_parent_array:
                 # If this is the first time we found a usage of this entity in the context of an array, we need to add
                 # a dummy dictionary entry and update the entity_offset_map
                 if array_offset == 0:
                     add_dictionary_row(schema_dictionary, start, 0, entity_type, '', '',
-                                       len(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]), offset)
-                    entity_offset_map[entity] = EntityOffsetMapTuple(offset, start)
+                                       len(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]), offset, '')
+                    entity_offset_map[entity_offset_map_index] = \
+                        EntityOffsetMapTuple(offset, start, len(entity_repo[entity]
+                                                                [ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]))
 
-                return entity_offset_map[entity].offset_to_array, len(entity_repo[entity][
+                return entity_offset_map[entity_offset_map_index].offset_to_array, len(entity_repo[entity][
                                                                           ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX])
 
-            return offset, len(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX])
+            return offset, entity_offset_map[entity_offset_map_index].count
 
         # For a set or enum add an anonymous entry indicating this is a set or enum if used in the context of an array
         offset = start
         if is_parent_array and (entity_type == 'Set' or entity_type == 'Enum'):
             add_dictionary_row(schema_dictionary, start, 0, entity_type, '', anonymous_entry_name,
-                               len(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]), start + 1)
+                               len(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]), start + 1, '')
             start = start + 1
 
         child_count = 0
         for index, property in enumerate(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
-            if entity_type == 'Enum':  # this is an enum
-                add_dictionary_row(schema_dictionary, index + start, property[PROPERTY_SEQ_NUMBER], 'String', '',
-                                   property[PROPERTY_FIELD_STRING], 0, '')
-            else:  # all other types
-                add_dictionary_row(schema_dictionary, index + start, property[PROPERTY_SEQ_NUMBER],
-                                   property[PROPERTY_TYPE], property[PROPERTY_FLAGS], property[PROPERTY_FIELD_STRING],
-                                   0, property[PROPERTY_OFFSET])
-            child_count = child_count + 1
+            is_supported = True
+            excerpt = ''
+            if len(property) > PROPERTY_EXPAND:
+                excerpt = property[PROPERTY_EXPAND]
+
+            if len(excerpt_filter) > 0:
+                is_supported = False
+                property_excerpts = re.findall('Excerpt=(.*)', excerpt)
+                if len(property_excerpts):
+                    property_excerpts = property_excerpts[0].split(',')
+                    for e in property_excerpts:
+                        if e is '' or e in excerpt_filter:
+                            is_supported = True
+                            break
+
+            if is_supported:
+                if entity_type == 'Enum':  # this is an enum
+                    add_dictionary_row(schema_dictionary, child_count + start, property[PROPERTY_SEQ_NUMBER], 'String', '',
+                                       property[PROPERTY_FIELD_STRING], 0, '', excerpt)
+                else:  # all other types
+                    add_dictionary_row(schema_dictionary, child_count + start, property[PROPERTY_SEQ_NUMBER],
+                                       property[PROPERTY_TYPE], property[PROPERTY_FLAGS], property[PROPERTY_FIELD_STRING],
+                                       0, property[PROPERTY_OFFSET], excerpt)
+                child_count = child_count + 1
         if child_count == 0:
             offset = 0
 
         # If we are here, then this is a new set of entries added to the dictionary. Let's update the entity_offset_map
         # to cache the offsets.
         if is_parent_array:
-            entity_offset_map[entity] = EntityOffsetMapTuple(offset+1, offset)
+            entity_offset_map[entity_offset_map_index] = EntityOffsetMapTuple(offset+1, offset, child_count)
         else:
-            entity_offset_map[entity] = EntityOffsetMapTuple(offset, 0)
+            entity_offset_map[entity_offset_map_index] = EntityOffsetMapTuple(offset, 0, child_count)
 
         return offset, child_count
 
@@ -673,11 +720,11 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity, entity_offset
             simple_type = primitive_type
 
         if simple_type not in entity_offset_map:
-            add_dictionary_row(schema_dictionary, start, 0, simple_type, '', '', 0, '')
+            add_dictionary_row(schema_dictionary, start, 0, simple_type, '', '', 0, '', '')
 
             # store off into the entity offset map to reuse for other entries that use
             # the same primitive type
-            entity_offset_map[simple_type] = EntityOffsetMapTuple(start, 0)
+            entity_offset_map[simple_type] = EntityOffsetMapTuple(start, 0, 0)
         else:
             start = entity_offset_map[simple_type].offset
 
@@ -746,11 +793,15 @@ def generate_dictionary(dictionary, entity_repo, entity_offset_map, optimize_dup
                          or item[DICTIONARY_ENTRY_FORMAT] == 'Array'
                          or item[DICTIONARY_ENTRY_FORMAT] == 'Namespace')):
 
+                excerpt_filter = re.findall('ExcerptCopy=(.*)', item[DICTIONARY_ENTRY_EXCERPT])
+
                 # Add dictionary entries
                 offset, child_count = add_dictionary_entries(tmp_dictionary, entity_repo,
                                                              item[DICTIONARY_ENTRY_OFFSET],
                                                              entity_offset_map,
-                                                             item[DICTIONARY_ENTRY_FORMAT] == 'Array')
+                                                             item[DICTIONARY_ENTRY_FORMAT] == 'Array',
+                                                             '',
+                                                             excerpt_filter)
 
                 tmp_dictionary[index][DICTIONARY_ENTRY_OFFSET] = ''
                 if offset != 0:
@@ -803,7 +854,7 @@ def add_odata_annotations(annotation_dictionary, odata_annotation_location):
             if verbose:
                 print('Unknown format')
 
-        add_dictionary_row(annotation_dictionary, offset, offset - 5, bej_format, '', k, 0, '')
+        add_dictionary_row(annotation_dictionary, offset, offset - 5, bej_format, '', k, 0, '', '')
         offset = offset + 1
         count = count + 1
 
@@ -1014,7 +1065,7 @@ def generate_annotation_dictionary(annotation_version, json_schema_dirs, entity_
         pprint.PrettyPrinter(indent=3).pprint(entity_repo)
 
     annotation_dictionary = []
-    add_dictionary_row(annotation_dictionary, 0, 0, "Set", '', "Annotations", 0, 'Annotations')
+    add_dictionary_row(annotation_dictionary, 0, 0, "Set", '', "Annotations", 0, 'Annotations', '')
     annotation_dictionary = generate_dictionary(annotation_dictionary, entity_repo, entity_offset_map, False)
 
     return annotation_dictionary
@@ -1504,7 +1555,7 @@ def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
                                              dictionary_byte_array=None,
                                              json_dictionary=None))
 
-            add_dictionary_entries(dictionary, entity_repo, entity, entity_offset_map, True, get_entity_name(entity))
+            add_dictionary_entries(dictionary, entity_repo, entity, entity_offset_map, True, get_entity_name(entity), [])
             dictionary = generate_dictionary(dictionary, entity_repo, entity_offset_map)
             ver = get_latest_version_as_ver32(entity)
             if verbose:
@@ -1515,6 +1566,7 @@ def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
 
         # Generate JSON dictionary.
         json_dictionary = generate_json_dictionary(json_schema_dirs, dictionary, dictionary_byte_array, entity)
+
         # Return the named tuple.
         return (SchemaDictionary(dictionary=dictionary,
                                  dictionary_byte_array=dictionary_byte_array,
