@@ -681,10 +681,11 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity, entity_offset
             if len(excerpt_filter) > 0:
                 is_supported = False
                 property_excerpts = re.findall('Excerpt=(.*)', excerpt)
+                property_excerpts.extend(re.findall('ExcerptCopyOnly', excerpt))
                 if len(property_excerpts):
                     property_excerpts = property_excerpts[0].split(',')
                     for e in property_excerpts:
-                        if e is '' or e in excerpt_filter:
+                        if e is '' or e in excerpt_filter or e is 'ExcerptCopyOnly':
                             is_supported = True
                             break
 
