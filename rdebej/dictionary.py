@@ -150,6 +150,54 @@ def get_property_permissions(property):
     return ''
 
 
+# This will return excerpt annotations as a dictionary:
+# {ExcerptCopy:[A,B], Excerpt=[X, Y], ExcerptCopyOnly:[]}
+# Examples:
+# {ExcerptCopy:[], Excerpt=[Y]}
+# {ExcerptCopyOnly:[]}
+#
+def get_property_excerpts(property_element):
+    excerpt_dict = {}
+    excerpt_name = ''
+    excerpt_data = []
+
+    # Assumption: A property can be the source for an excerpt copy or could be the destination but cannot be both!
+
+    # Excerpt annotations applicable for destination:
+    # ExcerptCopy is used to copy an excerpt from a source to the destination.
+    excerpt_copies = property_element.xpath('child::edm:Annotation[@Term=\'Redfish.ExcerptCopy\']',
+                                            namespaces=ODATA_ALL_NAMESPACES)
+    if len(excerpt_copies):
+        excerpt_dict['ExcerptCopy'] = []
+        excerpt_name = 'ExcerptCopy='
+        for excerpt in excerpt_copies:
+            if excerpt.get("String"):
+                excerpt_dict['ExcerptCopy'].extend(excerpt.get("String").split(','))
+                excerpt_name += excerpt.get("String")
+
+    # Excerpt annotations applicable for source:
+    # Excerpt specifies that the property can be a source for an ExcerptCopy and can exist as a property in the source.
+    # ExcerptCopyOnly specifies that this property can be a source for an ExcerptCopy AND does NOT exist as a property
+    # in the source'
+    excerpts = property_element.xpath('child::edm:Annotation[@Term=\'Redfish.Excerpt\']',
+                                      namespaces=ODATA_ALL_NAMESPACES)
+    if len(excerpts):
+        excerpt_dict['Excerpt'] = []
+        excerpt_name = 'Excerpt='
+        for excerpt in excerpts:
+            if excerpt.get("String"):
+                excerpt_dict['Excerpt'].extend(excerpt.get("String").split(','))
+                excerpt_name += excerpt.get("String")
+
+    excerpt_copy_only = property_element.xpath('child::edm:Annotation[@Term=\'Redfish.ExcerptCopyOnly\']',
+                                               namespaces=ODATA_ALL_NAMESPACES)
+    if len(excerpt_copy_only):
+        excerpt_dict['ExcerptCopyOnly'] = []
+        excerpt_name = 'ExcerptCopyOnly'
+
+    return excerpt_dict
+
+
 def get_properties(some_type, path='descendant-or-self::edm:Property | edm:NavigationProperty'):
     global verbose
 
@@ -174,45 +222,23 @@ def get_properties(some_type, path='descendant-or-self::edm:Property | edm:Navig
                                                namespaces=ODATA_ALL_NAMESPACES)))
         is_auto_expand_refs = not is_auto_expand
 
-        excerpt_name = ''
-        excerpt_data = []
-        excerpt_copies = property_element.xpath('child::edm:Annotation[@Term=\'Redfish.ExcerptCopy\']',
-                               namespaces=ODATA_ALL_NAMESPACES)
-        if len(excerpt_copies):
-            excerpt_name = 'ExcerptCopy='
-            excerpt_data = excerpt_copies
-
-        excerpts = property_element.xpath('child::edm:Annotation[@Term=\'Redfish.Excerpt\']',
-                                                namespaces=ODATA_ALL_NAMESPACES)
-        if len(excerpts):
-            excerpt_name = 'Excerpt='
-            excerpt_data = excerpts
-
-        excerpt_copy_only = property_element.xpath('child::edm:Annotation[@Term=\'Redfish.ExcerptCopyOnly\']',
-                                                namespaces=ODATA_ALL_NAMESPACES)
-        if len(excerpt_copy_only):
-            excerpt_name = 'ExcerptCopyOnly'
-            excerpt_data = excerpt_copy_only
-
-        for excerpt in excerpt_data:
-            if excerpt.get("String"):
-                excerpt_name += excerpt.get("String")
+        excerpt_dict = get_property_excerpts(property_element)
 
         primitive_type = get_primitive_type(property_type)
         if primitive_type != '':  # primitive type?
-            properties.append([property_name, primitive_type, property_flags, '', excerpt_name])
+            properties.append([property_name, primitive_type, property_flags, '', excerpt_dict])
         else:  # complex type
             complex_type = None
             is_array = re.compile('Collection\((.*?)\)').match(property_type)
             if is_array:
                 if is_auto_expand_refs:
                     # TODO fix references
-                    properties.append([property_name, 'Array', property_flags, 'AutoExpandRef', excerpt_name])
+                    properties.append([property_name, 'Array', property_flags, 'AutoExpandRef', excerpt_dict])
                 else:  # AutoExpand or not specified
                     array_type = is_array.group(1)
 
                     if array_type.startswith('Edm.'):  # primitive types
-                        properties.append([property_name, 'Array', property_flags, array_type, '', excerpt_name])
+                        properties.append([property_name, 'Array', property_flags, array_type, '', excerpt_dict])
                     else:
                         properties.append([property_name, 'Array', property_flags, strip_version(is_array.group(1)), 'AutoExpand'])
             else:
@@ -220,16 +246,16 @@ def get_properties(some_type, path='descendant-or-self::edm:Property | edm:Navig
 
             if complex_type is not None:
                 if complex_type.tag == ODATA_ENUM_TYPE:
-                    properties.append([property_name, 'Enum', property_flags, strip_version(property_type), excerpt_name])
+                    properties.append([property_name, 'Enum', property_flags, strip_version(property_type), excerpt_dict])
                 elif complex_type.tag == ODATA_COMPLEX_TYPE or complex_type.tag == ODATA_ENTITY_TYPE:
-                    if is_auto_expand_refs and excerpt_name == '':
-                        properties.append([property_name, 'Set', property_flags, '', excerpt_name])
+                    if is_auto_expand_refs and len(excerpt_dict) == 0:
+                        properties.append([property_name, 'Set', property_flags, '', excerpt_dict])
                     else:
-                        properties.append([property_name, 'Set', property_flags, strip_version(property_type), excerpt_name])
+                        properties.append([property_name, 'Set', property_flags, strip_version(property_type), excerpt_dict])
                 elif complex_type.tag == ODATA_TYPE_DEFINITION:
                     assert(re.compile('Edm\..*').match(complex_type.get('UnderlyingType')))
                     primitive_type = get_primitive_type(complex_type.get('UnderlyingType'))
-                    properties.append([property_name, primitive_type, property_flags, '', excerpt_name])
+                    properties.append([property_name, primitive_type, property_flags, '', excerpt_dict])
                 else:
                     if verbose:
                         print(complex_type.tag)
@@ -641,8 +667,9 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity, entity_offset
 
         # for caching purposes with excerpt, we construct the entity name with the excerpt-copy
         entity_offset_map_index = entity
-        for excerpt in excerpt_filter:
-            entity_offset_map_index += excerpt
+        if excerpt_filter is not None:
+            for excerpt in excerpt_filter:
+                entity_offset_map_index += excerpt
 
         # Check to see if dictionary entries for the entity has already been generated and use the cached offsets
         # if yes.
@@ -674,29 +701,42 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity, entity_offset
         child_count = 0
         for index, property in enumerate(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
             is_supported = True
-            excerpt = ''
+            excerpt_dict = {}
             if len(property) > PROPERTY_EXPAND:
-                excerpt = property[PROPERTY_EXPAND]
+                excerpt_dict = property[PROPERTY_EXPAND]
 
-            if len(excerpt_filter) > 0:
+            if excerpt_filter is not None:
                 is_supported = False
-                property_excerpts = re.findall('Excerpt=(.*)', excerpt)
-                property_excerpts.extend(re.findall('ExcerptCopyOnly', excerpt))
-                if len(property_excerpts):
-                    property_excerpts = property_excerpts[0].split(',')
-                    for e in property_excerpts:
-                        if e is '' or e in excerpt_filter or e is 'ExcerptCopyOnly':
-                            is_supported = True
-                            break
+                # If this property is tagged as an excerpt_copy_only, we include it
+                if 'ExcerptCopyOnly' in excerpt_dict:
+                    is_supported = True
+                if 'Excerpt' in excerpt_dict:
+                    is_supported = False
+                    if len(excerpt_dict['Excerpt']) == 0:
+                        is_supported = True
+                    else:
+                        for e in excerpt_dict['Excerpt']:
+                            if e in excerpt_filter:
+                                is_supported = True
+                                break
+
+                # property_excerpts = re.findall('Excerpt=(.*)', excerpt)
+                # property_excerpts.extend(re.findall('ExcerptCopyOnly', excerpt))
+                # if len(property_excerpts):
+                #     property_excerpts = property_excerpts[0].split(',')
+                #     for e in property_excerpts:
+                #         if e is '' or e in excerpt_filter or e is 'ExcerptCopyOnly':
+                #             is_supported = True
+                #             break
 
             if is_supported:
                 if entity_type == 'Enum':  # this is an enum
                     add_dictionary_row(schema_dictionary, child_count + start, property[PROPERTY_SEQ_NUMBER], 'String', '',
-                                       property[PROPERTY_FIELD_STRING], 0, '', excerpt)
+                                       property[PROPERTY_FIELD_STRING], 0, '', excerpt_dict)
                 else:  # all other types
                     add_dictionary_row(schema_dictionary, child_count + start, property[PROPERTY_SEQ_NUMBER],
                                        property[PROPERTY_TYPE], property[PROPERTY_FLAGS], property[PROPERTY_FIELD_STRING],
-                                       0, property[PROPERTY_OFFSET], excerpt)
+                                       0, property[PROPERTY_OFFSET], excerpt_dict)
                 child_count = child_count + 1
         if child_count == 0:
             offset = 0
@@ -794,7 +834,9 @@ def generate_dictionary(dictionary, entity_repo, entity_offset_map, optimize_dup
                          or item[DICTIONARY_ENTRY_FORMAT] == 'Array'
                          or item[DICTIONARY_ENTRY_FORMAT] == 'Namespace')):
 
-                excerpt_filter = re.findall('ExcerptCopy=(.*)', item[DICTIONARY_ENTRY_EXCERPT])
+                excerpt_filter = None
+                if 'ExcerptCopy' in item[DICTIONARY_ENTRY_EXCERPT]:
+                    excerpt_filter = item[DICTIONARY_ENTRY_EXCERPT]['ExcerptCopy']
 
                 # Add dictionary entries
                 offset, child_count = add_dictionary_entries(tmp_dictionary, entity_repo,
@@ -820,6 +862,9 @@ def generate_dictionary(dictionary, entity_repo, entity_offset_map, optimize_dup
         else:
             can_expand = False
 
+    # strip excerpt meta-data from the dictionary
+    dictionary = [item[:len(item)-1] for item in dictionary]
+    
     return dictionary
 
 
@@ -1556,7 +1601,7 @@ def generate_schema_dictionary(source_type, csdl_schema_dirs, json_schema_dirs,
                                              dictionary_byte_array=None,
                                              json_dictionary=None))
 
-            add_dictionary_entries(dictionary, entity_repo, entity, entity_offset_map, True, get_entity_name(entity), [])
+            add_dictionary_entries(dictionary, entity_repo, entity, entity_offset_map, True, get_entity_name(entity), None)
             dictionary = generate_dictionary(dictionary, entity_repo, entity_offset_map)
             ver = get_latest_version_as_ver32(entity)
             if verbose:
