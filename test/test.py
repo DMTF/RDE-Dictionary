@@ -100,6 +100,30 @@ MAJOR_SCHEMA_DICTIONARY_LIST = [
                                 TestSpecification(
                                     '$csdl_dir',
                                     '$json_schema_dir',
+                                    'Outlet_v1.xml',
+                                    'Outlet.Outlet',
+                                    '',
+                                    '',
+                                    '',
+                                    'outlet.bin',
+                                    'test/outlet.json',
+                                    'Copyright (c) 2018 Acme Corp'),
+
+                                TestSpecification(
+                                    '$csdl_dir',
+                                    '$json_schema_dir',
+                                    'Circuit_v1.xml',
+                                    'Circuit.Circuit',
+                                    '',
+                                    '',
+                                    '',
+                                    'circuit.bin',
+                                    'test/circuit.json',
+                                    'Copyright (c) 2018 Acme Corp'),
+
+                                TestSpecification(
+                                    '$csdl_dir',
+                                    '$json_schema_dir',
                                     'Storage_v1.xml',
                                     'Storage.Storage',
                                     '',
