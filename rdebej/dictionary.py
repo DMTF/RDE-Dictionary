@@ -158,8 +158,6 @@ def get_property_permissions(property):
 #
 def get_property_excerpts(property_element):
     excerpt_dict = {}
-    excerpt_name = ''
-    excerpt_data = []
 
     # Assumption: A property can be the source for an excerpt copy or could be the destination but cannot be both!
 
@@ -169,11 +167,9 @@ def get_property_excerpts(property_element):
                                             namespaces=ODATA_ALL_NAMESPACES)
     if len(excerpt_copies):
         excerpt_dict['ExcerptCopy'] = []
-        excerpt_name = 'ExcerptCopy='
         for excerpt in excerpt_copies:
             if excerpt.get("String"):
                 excerpt_dict['ExcerptCopy'].extend(excerpt.get("String").split(','))
-                excerpt_name += excerpt.get("String")
 
     # Excerpt annotations applicable for source:
     # Excerpt specifies that the property can be a source for an ExcerptCopy and can exist as a property in the source.
@@ -183,17 +179,14 @@ def get_property_excerpts(property_element):
                                       namespaces=ODATA_ALL_NAMESPACES)
     if len(excerpts):
         excerpt_dict['Excerpt'] = []
-        excerpt_name = 'Excerpt='
         for excerpt in excerpts:
             if excerpt.get("String"):
                 excerpt_dict['Excerpt'].extend(excerpt.get("String").split(','))
-                excerpt_name += excerpt.get("String")
 
     excerpt_copy_only = property_element.xpath('child::edm:Annotation[@Term=\'Redfish.ExcerptCopyOnly\']',
                                                namespaces=ODATA_ALL_NAMESPACES)
     if len(excerpt_copy_only):
         excerpt_dict['ExcerptCopyOnly'] = []
-        excerpt_name = 'ExcerptCopyOnly'
 
     return excerpt_dict
 
@@ -659,6 +652,31 @@ def add_dictionary_row(dictionary, index, seq_num, format, format_flags, field_s
     dictionary.append([index, seq_num, format, format_flags, field_string, child_count, offset, excerpts])
 
 
+def is_property_supported(property, excerpt_dict, excerpt_filter):
+    is_supported = True
+
+    if excerpt_filter is None: # This is a source
+        if 'ExcerptCopyOnly' in excerpt_dict:
+            is_supported = False
+
+    if excerpt_filter is not None:
+        is_supported = False
+        # If this property is tagged as an excerpt_copy_only, we include it
+        if 'ExcerptCopyOnly' in excerpt_dict:
+            is_supported = True
+        if 'Excerpt' in excerpt_dict:
+            is_supported = False
+            if len(excerpt_dict['Excerpt']) == 0:
+                is_supported = True
+            else:
+                for e in excerpt_dict['Excerpt']:
+                    if e in excerpt_filter:
+                        is_supported = True
+                        break
+
+    return is_supported
+
+
 def add_dictionary_entries(schema_dictionary, entity_repo, entity, entity_offset_map, is_parent_array,
                            anonymous_entry_name, excerpt_filter):
     if entity in entity_repo:
@@ -700,43 +718,18 @@ def add_dictionary_entries(schema_dictionary, entity_repo, entity, entity_offset
 
         child_count = 0
         for index, property in enumerate(entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]):
-            is_supported = True
             excerpt_dict = {}
             if len(property) > PROPERTY_EXPAND:
                 excerpt_dict = property[PROPERTY_EXPAND]
 
-            if excerpt_filter is not None:
-                is_supported = False
-                # If this property is tagged as an excerpt_copy_only, we include it
-                if 'ExcerptCopyOnly' in excerpt_dict:
-                    is_supported = True
-                if 'Excerpt' in excerpt_dict:
-                    is_supported = False
-                    if len(excerpt_dict['Excerpt']) == 0:
-                        is_supported = True
-                    else:
-                        for e in excerpt_dict['Excerpt']:
-                            if e in excerpt_filter:
-                                is_supported = True
-                                break
-
-                # property_excerpts = re.findall('Excerpt=(.*)', excerpt)
-                # property_excerpts.extend(re.findall('ExcerptCopyOnly', excerpt))
-                # if len(property_excerpts):
-                #     property_excerpts = property_excerpts[0].split(',')
-                #     for e in property_excerpts:
-                #         if e is '' or e in excerpt_filter or e is 'ExcerptCopyOnly':
-                #             is_supported = True
-                #             break
-
-            if is_supported:
+            if is_property_supported(property, excerpt_dict, excerpt_filter):
                 if entity_type == 'Enum':  # this is an enum
-                    add_dictionary_row(schema_dictionary, child_count + start, property[PROPERTY_SEQ_NUMBER], 'String', '',
-                                       property[PROPERTY_FIELD_STRING], 0, '', excerpt_dict)
+                    add_dictionary_row(schema_dictionary, child_count + start, property[PROPERTY_SEQ_NUMBER], 'String',
+                                       '', property[PROPERTY_FIELD_STRING], 0, '', excerpt_dict)
                 else:  # all other types
                     add_dictionary_row(schema_dictionary, child_count + start, property[PROPERTY_SEQ_NUMBER],
-                                       property[PROPERTY_TYPE], property[PROPERTY_FLAGS], property[PROPERTY_FIELD_STRING],
-                                       0, property[PROPERTY_OFFSET], excerpt_dict)
+                                       property[PROPERTY_TYPE], property[PROPERTY_FLAGS],
+                                       property[PROPERTY_FIELD_STRING], 0, property[PROPERTY_OFFSET], excerpt_dict)
                 child_count = child_count + 1
         if child_count == 0:
             offset = 0
