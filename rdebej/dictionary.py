@@ -864,7 +864,7 @@ def generate_dictionary(dictionary, entity_repo, entity_offset_map, optimize_dup
 
     # strip excerpt meta-data from the dictionary
     dictionary = [item[:len(item)-1] for item in dictionary]
-    
+
     return dictionary
 
 
