@@ -56,5 +56,13 @@
             "@odata.id": "/redfish/v1/PowerEquipment/RackPDUs/1/Branches/A"
         }
     },
+    "Actions": {
+        "#Outlet.PowerControl": {
+            "target": "/redfish/v1/PowerEquipment/RackPDUs/1/Outlets/A1/Outlet.PowerControl"
+        },
+        "#Outlet.ResetMetrics": {
+            "target": "/redfish/v1/PowerEquipment/RackPDUs/1/Outlets/A1/Outlet.ResetMetrics"
+        }
+    },
     "@odata.id": "/redfish/v1/PowerEquipment/RackPDUs/1/Outlets/A1"
 }
