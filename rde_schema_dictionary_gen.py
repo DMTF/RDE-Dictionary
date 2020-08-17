@@ -107,7 +107,7 @@ if __name__ == '__main__':
     if schema_dictionary is not None and schema_dictionary.dictionary:
         if not silent:
             print_table_data(
-                          [["Row", "Sequence#", "Format", "Flags", "Field String", "Child Count", "Offset", "Excerpt"]]
+                          [["Row", "Sequence#", "Format", "Flags", "Field String", "Child Count", "Offset"]]
                           +
                           schema_dictionary.dictionary)
 
