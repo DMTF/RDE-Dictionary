@@ -12,6 +12,6 @@ install:
    
    
 script:
-   - pipenv run python -u test/test.py --schema_source=https://www.dmtf.org/sites/default/files/standards/documents/DSP8010_2019.3.zip
-   - pipenv run behave -D schema_sources="[{'source':'http', 'url':'https://www.dmtf.org/sites/default/files/standards/documents/DSP8010_2019.3.zip', 'schema_dir':'tmp_schema', 'csdl_dir':'csdl', 'json_schema_dir':'json-schema'}]" test/features
+   - pipenv run python -u test/test.py --schema_source=https://www.dmtf.org/sites/default/files/standards/documents/DSP8010_2020.2.zip
+   - pipenv run behave -D schema_sources="[{'source':'http', 'url':'https://www.dmtf.org/sites/default/files/standards/documents/DSP8010_2020.2.zip', 'schema_dir':'tmp_schema', 'csdl_dir':'csdl', 'json_schema_dir':'json-schema'}]" test/features
    - test/test_cli.sh
