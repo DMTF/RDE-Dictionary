@@ -70,5 +70,10 @@
             "@odata.id": "/redfish/v1/Chassis/StorageEnclosure1" 
          }
       ]
-   }
+   },
+   "@Redfish.OperationApplyTime": "Immediate",
+   "@Redfish.CollectionCapabilities": {
+      "MaxMembers": 0
+   },
+   "@Message.ExtendedInfo": []
 }
