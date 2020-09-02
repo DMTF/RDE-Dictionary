@@ -284,6 +284,18 @@ def validate_complex_type_length(input_stream, complex_type_start_pos, length):
     return current_pos - set_value_start_pos == length
 
 
+def get_entry_by_seq(schema_dict, annot_dict, seq, selector, entries_by_seq, entries_by_seq_selector):
+    dict_to_use = schema_dict if selector is BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA else annot_dict
+
+    # if we are changing dictionary context, we need to load entries for the new dictionary
+    if entries_by_seq_selector != selector:
+        base_entry = DictionaryByteArrayStream(dict_to_use, 0, -1).get_next_entry()
+        entries_by_seq = load_dictionary_subset_by_key_sequence(dict_to_use,
+                                                                base_entry[DICTIONARY_ENTRY_OFFSET],
+                                                                base_entry[DICTIONARY_ENTRY_CHILD_COUNT])
+    return entries_by_seq[seq]
+
+
 def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entries_by_seq, entries_by_seq_selector,
                       prop_count, is_seq_array_index, add_name, deferred_binding_strings):
     index = 0
@@ -297,7 +309,7 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
             [seq, selector], length, count = bej_unpack_set_start(input_stream)
             if is_seq_array_index:
                 seq = 0
-            entry = entries_by_seq[seq]
+            entry = get_entry_by_seq(schema_dict, annot_dict, seq, selector, entries_by_seq, entries_by_seq_selector)
 
             if add_name:
                 bej_decode_name(annot_dict, seq, selector, entries_by_seq, entries_by_seq_selector, output_stream)
@@ -369,7 +381,8 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
                 bej_decode_name(annot_dict, seq, selector, entries_by_seq, entries_by_seq_selector, output_stream)
 
             dict_to_use = schema_dict if selector is BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA else annot_dict
-            enum_value = bej_decode_enum_value(dict_to_use, entries_by_seq[seq], value)
+            enum_value = bej_decode_enum_value(dict_to_use, get_entry_by_seq(schema_dict, annot_dict, seq, selector,
+                                                                             entries_by_seq, entries_by_seq_selector), value)
             output_stream.write('"' + enum_value + '"')
 
         elif format == BEJ_FORMAT_NULL:
@@ -386,15 +399,7 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
                 seq = 0
 
             dict_to_use = schema_dict if selector is BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA else annot_dict
-
-            # if we are changing dictionary context, we need to load entries for the new dictionary
-            if entries_by_seq_selector != selector:
-                base_entry = DictionaryByteArrayStream(dict_to_use, 0, -1).get_next_entry()
-                entries_by_seq = load_dictionary_subset_by_key_sequence(dict_to_use,
-                                                                            base_entry[DICTIONARY_ENTRY_OFFSET],
-                                                                            base_entry[DICTIONARY_ENTRY_CHILD_COUNT])
-
-            entry = entries_by_seq[seq]
+            entry = get_entry_by_seq(schema_dict, annot_dict, seq, selector, entries_by_seq, entries_by_seq_selector)
 
             if add_name:
                 bej_decode_name(annot_dict, seq, selector, entries_by_seq, entries_by_seq_selector, output_stream)
