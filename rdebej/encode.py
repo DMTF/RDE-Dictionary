@@ -448,6 +448,9 @@ def bej_encode_sflv(output_stream, schema_dict, annot_dict, dict_to_use, dict_en
 
         bej_pack_array_done(nested_stream, seq)
 
+    elif format == BEJ_FORMAT_NULL:
+        bej_pack_sfl(output_stream, seq, BEJ_FORMAT_NULL, 0)
+
     else:
         if verbose:
             print('Failed to encode value:', json_value)
@@ -486,6 +489,14 @@ def bej_encode_stream(output_stream, json_data, schema_dict, annot_dict, dict_to
                     if dict_to_use == schema_dict else BEJ_DICTIONARY_SELECTOR_ANNOTATION
                 prop_format = entry[DICTIONARY_ENTRY_FORMAT]
 
+            json_value = json_data[prop]
+            if json_value is None:
+                if not entry[DICTIONARY_ENTRY_NULLABLE_PROPERTY]:
+                    if verbose:
+                        print('Property {} cannot be null'.format(prop))
+                    return False
+                prop_format = BEJ_FORMAT_NULL
+
             sequence_number_with_dictionary_selector = (entry[DICTIONARY_ENTRY_SEQUENCE_NUMBER] << 1) \
                                                        | dictionary_selector_bit_value
 
@@ -506,11 +517,10 @@ def bej_encode_stream(output_stream, json_data, schema_dict, annot_dict, dict_to
 
                 success = bej_encode_sflv(nested_stream, schema_dict, annot_dict, tmp_dict_to_use, entry,
                                           sequence_number_with_dictionary_selector, entry[DICTIONARY_ENTRY_FORMAT],
-                                          json_data[prop], pdr_map, 0, verbose)
+                                          json_value, pdr_map, 0, verbose)
 
                 bej_pack_property_annotation_done(nested_stream, prop_seq)
             else:
-                json_value = json_data[prop]
                 format_flags = 0
                 # Special handling for '@odata.id' deferred binding string
                 if prop == '@odata.id' and prop_format == BEJ_FORMAT_STRING:
