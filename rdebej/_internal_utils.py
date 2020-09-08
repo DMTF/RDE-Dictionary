@@ -31,6 +31,7 @@ DICTIONARY_ENTRY_SEQUENCE_NUMBER = 1
 DICTIONARY_ENTRY_OFFSET = 2
 DICTIONARY_ENTRY_CHILD_COUNT = 3
 DICTIONARY_ENTRY_NAME = 4
+DICTIONARY_ENTRY_NULLABLE_PROPERTY = 5
 
 BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA = 0x00
 BEJ_DICTIONARY_SELECTOR_ANNOTATION = 0x01
@@ -71,8 +72,9 @@ class DictionaryByteArrayStream:
         entry = []
         current_entry = 0
         if self._current_entry < self._child_count or self._child_count == -1:
+            format = self.get_int(1)
 
-            entry.append(self.get_int(1) >> 4)  # format
+            entry.append(format >> 4)  # value format
             entry.append(self.get_int(2))  # sequence
             entry.append(self.get_int(2))  # offset
             entry.append(self.get_int(2))  # child_count
@@ -86,6 +88,7 @@ class DictionaryByteArrayStream:
                 name = "".join(map(chr, self._byte_array[name_offset:name_offset+name_length-1])) # -1 to skip null terminator
 
             entry.append(name)
+            entry.append((format & (1 << 2)) != 0) # nullable_property flag
 
             if self._child_count != -1:
                 self._current_entry += 1
