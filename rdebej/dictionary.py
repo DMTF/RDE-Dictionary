@@ -1053,7 +1053,7 @@ def build_requirements(obj, required_properties, entity, entity_repo):
                                 entity_repo_prop[ENTITY_REPO_ENTRY_TYPE] == 'Array' :
                             build_requirements(prop[1], required_properties,
                                                entity_repo_prop[ENTITY_REPO_ENTRY_REFERENCE], entity_repo)
-                if not is_found and prop[0][0] is not '@':
+                if not is_found and '@' not in prop[0]:
                     raise Exception("Profile property not found in schema", prop[0])
 
     if 'Values' in obj: # For enums
