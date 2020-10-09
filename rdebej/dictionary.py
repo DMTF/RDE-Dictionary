@@ -1053,6 +1053,8 @@ def build_requirements(obj, required_properties, entity, entity_repo):
                                 entity_repo_prop[ENTITY_REPO_ENTRY_TYPE] == 'Array' :
                             build_requirements(prop[1], required_properties,
                                                entity_repo_prop[ENTITY_REPO_ENTRY_REFERENCE], entity_repo)
+                # Throw an error if the profile property is not found in the schema
+                # (ignore annotation properties)
                 if not is_found and '@' not in prop[0]:
                     raise Exception("Profile property not found in schema", prop[0])
 
