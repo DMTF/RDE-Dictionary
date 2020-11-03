@@ -124,7 +124,7 @@ def bej_pack_nnint(stream, value, num_bytes):
     return num_bytes_packed
 
 
-def bej_pack_sfl(stream, seq_num, format, length, format_flags=0):
+def bej_pack_sfl(stream, seq_num, format, length, format_flags):
     # pack seq num as nnint
     num_bytes = bej_pack_nnint(stream, seq_num, 0)
 
@@ -138,10 +138,8 @@ def bej_pack_sfl(stream, seq_num, format, length, format_flags=0):
     return num_bytes
 
 
-def bej_pack_sflv_string(stream, seq_num, str, is_deferred_binding=False):
-    format_flags = 0
-    if is_deferred_binding:
-        format_flags = 0x01
+def bej_pack_sflv_string(stream, seq_num, str, format_flags):
+    str = str.replace('"', '\\"')
     num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_STRING, len(str) + 1, format_flags)
 
     # pack str
@@ -159,8 +157,8 @@ def bej_decode_sequence_number(seq):
     return seq >> 1, seq & 0x01
 
 
-def bej_pack_sflv_boolean(stream, seq_num, val):
-    num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_BOOLEAN, 1)
+def bej_pack_sflv_boolean(stream, seq_num, val, format_flags):
+    num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_BOOLEAN, 1, format_flags)
 
     # pack val
     if val == True:
@@ -193,11 +191,11 @@ def bej_pack_v_integer(stream, value, num_bytes_for_value, is_padding_required):
     return num_bytes_packed
 
 
-def bej_pack_sflv_integer(stream, seq_num, value):
+def bej_pack_sflv_integer(stream, seq_num, value, format_flags):
     num_bytes_for_value, is_padding_required = get_num_bytes_and_padding(value)
 
     num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_INTEGER,
-                                    num_bytes_for_value+1 if is_padding_required else num_bytes_for_value)
+                                    num_bytes_for_value+1 if is_padding_required else num_bytes_for_value, format_flags)
 
     # pack the value
     num_bytes_packed += bej_pack_v_integer(stream, value, num_bytes_for_value, is_padding_required)
@@ -227,7 +225,7 @@ def split_whole_frac_leading_zeros(value, precision):
 
 # Packs a float as a SFLV
 # TODO: Does not support exponent
-def bej_pack_sflv_real(stream, seq_num, value, precision=16):
+def bej_pack_sflv_real(stream, seq_num, value, format_flags, precision=16):
     whole, frac, num_leading_zeros = split_whole_frac_leading_zeros(value, precision)
 
     num_bytes_for_whole, is_padding_required = get_num_bytes_and_padding(whole)
@@ -241,7 +239,7 @@ def bej_pack_sflv_real(stream, seq_num, value, precision=16):
                     1 + num_bytes_for_frac +  # fract (nnint)
                     2) # length of exp (nnint)
 
-    num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_REAL, total_length)
+    num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_REAL, total_length, format_flags)
 
     # pack the value
     num_bytes_packed += bej_pack_nnint(stream, num_bytes_to_pack_for_whole, 0)
@@ -253,16 +251,16 @@ def bej_pack_sflv_real(stream, seq_num, value, precision=16):
     return num_bytes_packed
 
 
-def bej_pack_sflv_enum(stream, seq_num, value):
+def bej_pack_sflv_enum(stream, seq_num, value, format_flags):
     enum_value_size = num_bytes_for_unsigned_integer(value) + 1 # enum value size as nint
-    num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_ENUM, enum_value_size)
+    num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_ENUM, enum_value_size, format_flags)
     num_bytes_packed += bej_pack_nnint(stream, value, 0)
 
     return num_bytes_packed
 
 
-def bej_pack_sflv_resource_link(stream, seq_num, pdr):
-    num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_RESOURCE_LINK, num_bytes_for_unsigned_integer(pdr)+1)
+def bej_pack_sflv_resource_link(stream, seq_num, pdr, format_flags):
+    num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_RESOURCE_LINK, num_bytes_for_unsigned_integer(pdr)+1, format_flags)
     num_bytes_packed += bej_pack_nnint(stream, pdr, 0)
 
     return num_bytes_packed
@@ -282,11 +280,11 @@ def bej_pack_set_start(stream, count):
     return tmp_stream
 
 
-def bej_pack_set_done(stream, seq_num):
+def bej_pack_set_done(stream, seq_num, format_flags=0):
     # pop the last stream from the stack and add the s, f and l. Length can now be determined from the current stream
     length = len(stream.getvalue())
     prev_stream = bej_set_stream_stack.pop()
-    num_bytes_packed = bej_pack_sfl(prev_stream, seq_num, BEJ_FORMAT_SET, length)
+    num_bytes_packed = bej_pack_sfl(prev_stream, seq_num, BEJ_FORMAT_SET, length, format_flags)
 
     # append the current stream to the prev and return prev
     prev_stream.write(stream.getvalue())
@@ -304,11 +302,11 @@ def bej_pack_array_start(stream, count):
     return tmp_stream
 
 
-def bej_pack_array_done(stream, seq_num):
+def bej_pack_array_done(stream, seq_num, format_flags):
     # pop the last stream from the stack and add the s, f and l. Length can now be determined from the current stream
     length = len(stream.getvalue())
     prev_stream = bej_set_stream_stack.pop()
-    num_bytes_packed = bej_pack_sfl(prev_stream, seq_num, BEJ_FORMAT_ARRAY, length)
+    num_bytes_packed = bej_pack_sfl(prev_stream, seq_num, BEJ_FORMAT_ARRAY, length, format_flags)
 
     # append the current stream to the prev and return prev
     prev_stream.write(stream.getvalue())
@@ -324,11 +322,11 @@ def bej_pack_property_annotation_start(stream):
     return tmp_stream
 
 
-def bej_pack_property_annotation_done(stream, prop_seq):
+def bej_pack_property_annotation_done(stream, prop_seq, format_flags=0):
     # pop the last stream from the stack and add the s, f and l. Length can now be determined from the current stream
     length = len(stream.getvalue())
     prev_stream = bej_set_stream_stack.pop()
-    num_bytes_packed = bej_pack_sfl(prev_stream, prop_seq, BEJ_FORMAT_PROPERTY_ANNOTATION, length)
+    num_bytes_packed = bej_pack_sfl(prev_stream, prop_seq, BEJ_FORMAT_PROPERTY_ANNOTATION, length, format_flags)
 
     # append the current stream to the prev and return prev
     prev_stream.write(stream.getvalue())
@@ -382,7 +380,7 @@ def get_annotation_dictionary_entries(annot_dict):
                                               base_entry[DICTIONARY_ENTRY_CHILD_COUNT])
 
 
-def bej_encode_enum(output_stream, dict_to_use, dict_entry, sequence_number_with_dictionary_selector, enum_value):
+def bej_encode_enum(output_stream, dict_to_use, dict_entry, sequence_number_with_dictionary_selector, enum_value, format_flags):
     # get the sequence number for the enum value from the dictionary
     enum_dict_stream = DictionaryByteArrayStream(dict_to_use, dict_entry[DICTIONARY_ENTRY_OFFSET],
                                                  dict_entry[DICTIONARY_ENTRY_CHILD_COUNT])
@@ -394,7 +392,7 @@ def bej_encode_enum(output_stream, dict_to_use, dict_entry, sequence_number_with
             value = enum_entry[DICTIONARY_ENTRY_SEQUENCE_NUMBER]
             break
 
-    bej_pack_sflv_enum(output_stream, sequence_number_with_dictionary_selector, value)
+    bej_pack_sflv_enum(output_stream, sequence_number_with_dictionary_selector, value, format_flags)
 
 def is_dict_entry_nullable(dict_entry):
     """
@@ -409,22 +407,22 @@ def bej_encode_sflv(output_stream, schema_dict, annot_dict, dict_to_use, dict_en
                     pdr_map, format_flags, verbose):
     success = True
     if is_dict_entry_nullable(dict_entry) and json_value == None:
-        bej_pack_sfl(output_stream, seq, BEJ_FORMAT_NULL, 0)
+        bej_pack_sfl(output_stream, seq, BEJ_FORMAT_NULL, 0, format_flags)
 
     elif format == BEJ_FORMAT_STRING:
         bej_pack_sflv_string(output_stream, seq, json_value, format_flags)
 
     elif format == BEJ_FORMAT_INTEGER:
-        bej_pack_sflv_integer(output_stream, seq, json_value)
+        bej_pack_sflv_integer(output_stream, seq, json_value, format_flags)
 
     elif format == BEJ_FORMAT_REAL:
-        bej_pack_sflv_real(output_stream, seq, json_value)
+        bej_pack_sflv_real(output_stream, seq, json_value, format_flags)
 
     elif format == BEJ_FORMAT_BOOLEAN:
-        bej_pack_sflv_boolean(output_stream, seq, json_value)
+        bej_pack_sflv_boolean(output_stream, seq, json_value, format_flags)
 
     elif format == BEJ_FORMAT_ENUM:
-        bej_encode_enum(output_stream, dict_to_use, dict_entry, seq, json_value)
+        bej_encode_enum(output_stream, dict_to_use, dict_entry, seq, json_value, format_flags)
 
     elif format == BEJ_FORMAT_RESOURCE_LINK:
         global current_available_pdr
@@ -433,14 +431,14 @@ def bej_encode_sflv(output_stream, schema_dict, annot_dict, dict_to_use, dict_en
             pdr_map[json_value] = current_available_pdr
             current_available_pdr += 1
         new_pdr_num = pdr_map[json_value]
-        bej_pack_sflv_resource_link(output_stream, seq, new_pdr_num)
+        bej_pack_sflv_resource_link(output_stream, seq, new_pdr_num, format_flags)
 
     elif format == BEJ_FORMAT_SET:
         nested_set_stream = bej_pack_set_start(output_stream, len(json_value))
         success = bej_encode_stream(nested_set_stream, json_value, schema_dict,
                                     annot_dict, dict_to_use, pdr_map, dict_entry[DICTIONARY_ENTRY_OFFSET],
                                     dict_entry[DICTIONARY_ENTRY_CHILD_COUNT], verbose)
-        bej_pack_set_done(nested_set_stream, seq)
+        bej_pack_set_done(nested_set_stream, seq, format_flags)
 
     elif format == BEJ_FORMAT_ARRAY:
         count = len(json_value)
@@ -457,7 +455,7 @@ def bej_encode_sflv(output_stream, schema_dict, annot_dict, dict_to_use, dict_en
             if not success:
                 break
 
-        bej_pack_array_done(nested_stream, seq)
+        bej_pack_array_done(nested_stream, seq, format_flags)
 
     else:
         if verbose:
@@ -477,6 +475,7 @@ def bej_encode_stream(output_stream, json_data, schema_dict, annot_dict, dict_to
         if prop in dict_entries or is_payload_annotation(prop):
             tmp_dict_to_use = dict_to_use
             entry = []
+            format_flags = 0
             # dict_to_use = schema_dict
 
             if is_payload_annotation(prop):
@@ -485,6 +484,8 @@ def bej_encode_stream(output_stream, json_data, schema_dict, annot_dict, dict_to
                 entry = get_annotation_dictionary_entries(annot_dict)[annotation_property]
                 dictionary_selector_bit_value = BEJ_DICTIONARY_SELECTOR_ANNOTATION
                 tmp_dict_to_use = annot_dict
+                if dict_to_use == annot_dict:
+                    format_flags |= BEJ_FLAG_NESTED_TOP_LEVEL_ANNOTATION
 
                 if schema_property != '':  # this is a property annotation (e.g. Status@Message.ExtendedInfo)
                     prop_format = BEJ_FORMAT_PROPERTY_ANNOTATION
@@ -517,12 +518,11 @@ def bej_encode_stream(output_stream, json_data, schema_dict, annot_dict, dict_to
 
                 success = bej_encode_sflv(nested_stream, schema_dict, annot_dict, tmp_dict_to_use, entry,
                                           sequence_number_with_dictionary_selector, entry[DICTIONARY_ENTRY_FORMAT],
-                                          json_data[prop], pdr_map, 0, verbose)
+                                          json_data[prop], pdr_map, format_flags, verbose)
 
                 bej_pack_property_annotation_done(nested_stream, prop_seq)
             else:
                 json_value = json_data[prop]
-                format_flags = 0
                 # Special handling for '@odata.id' deferred binding string
                 if prop == '@odata.id' and prop_format == BEJ_FORMAT_STRING:
                     global current_available_pdr
@@ -537,7 +537,7 @@ def bej_encode_stream(output_stream, json_data, schema_dict, annot_dict, dict_to
                     json_value = '%L' + str(new_pdr_num)
                     if len(res_link_parts) > 1:  # add the frag portion to the deferred binding string if any
                         json_value += '#' + res_link_parts[1]
-                    format_flags = 0x01  # deferred binding flag
+                    format_flags |= BEJ_FLAG_DEFERRED # deferred binding flag
 
                 success = bej_encode_sflv(output_stream, schema_dict, annot_dict, tmp_dict_to_use, entry,
                                           sequence_number_with_dictionary_selector, prop_format, json_value, pdr_map,
