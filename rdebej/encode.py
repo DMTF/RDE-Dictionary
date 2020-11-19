@@ -396,11 +396,22 @@ def bej_encode_enum(output_stream, dict_to_use, dict_entry, sequence_number_with
 
     bej_pack_sflv_enum(output_stream, sequence_number_with_dictionary_selector, value)
 
+def is_dict_entry_nullable(dict_entry):
+    """
+    Return True if the dictionary entry is nullable, False otherwise
+    """
+    if dict_entry[DICTIONARY_ENTRY_FLAGS] & 0x4:
+        return True
+    return False
+
 
 def bej_encode_sflv(output_stream, schema_dict, annot_dict, dict_to_use, dict_entry, seq, format, json_value,
                     pdr_map, format_flags, verbose):
     success = True
-    if format == BEJ_FORMAT_STRING:
+    if is_dict_entry_nullable(dict_entry) and json_value == None:
+        bej_pack_sfl(output_stream, seq, BEJ_FORMAT_NULL, 0)
+
+    elif format == BEJ_FORMAT_STRING:
         bej_pack_sflv_string(output_stream, seq, json_value, format_flags)
 
     elif format == BEJ_FORMAT_INTEGER:

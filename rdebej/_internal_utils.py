@@ -27,10 +27,11 @@ BEJ_FORMAT_UNKNOWN = 0xFF
 
 # Internal dictionary index
 DICTIONARY_ENTRY_FORMAT = 0
-DICTIONARY_ENTRY_SEQUENCE_NUMBER = 1
-DICTIONARY_ENTRY_OFFSET = 2
-DICTIONARY_ENTRY_CHILD_COUNT = 3
-DICTIONARY_ENTRY_NAME = 4
+DICTIONARY_ENTRY_FLAGS = 1
+DICTIONARY_ENTRY_SEQUENCE_NUMBER = 2
+DICTIONARY_ENTRY_OFFSET = 3
+DICTIONARY_ENTRY_CHILD_COUNT = 4
+DICTIONARY_ENTRY_NAME = 5
 
 BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA = 0x00
 BEJ_DICTIONARY_SELECTOR_ANNOTATION = 0x01
@@ -72,7 +73,9 @@ class DictionaryByteArrayStream:
         current_entry = 0
         if self._current_entry < self._child_count or self._child_count == -1:
 
-            entry.append(self.get_int(1) >> 4)  # format
+            format_flags = self.get_int(1)
+            entry.append(format_flags >> 4)  # format
+            entry.append(format_flags & 0xF)  # flags
             entry.append(self.get_int(2))  # sequence
             entry.append(self.get_int(2))  # offset
             entry.append(self.get_int(2))  # child_count
