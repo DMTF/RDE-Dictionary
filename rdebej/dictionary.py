@@ -69,6 +69,8 @@ silent = False
 
 EntityOffsetMapTuple = namedtuple('EntityOffsetMapTuple', 'offset offset_to_array count')
 
+PROPERTY_PATH = 'descendant-or-self::edm:Property | edm:NavigationProperty'
+
 
 def get_base_properties(entity_type):
     """
@@ -191,11 +193,72 @@ def get_property_excerpts(property_element):
     return excerpt_dict
 
 
-def get_properties(some_type, path='descendant-or-self::edm:Property | edm:NavigationProperty'):
+# Returns true if the entity has at least one property that has the Redfish.Revisions Added annotation
+def has_redfish_revisions_added(entity):
+    elements = entity.xpath('edm:Property | edm:NavigationProperty', namespaces=ODATA_ALL_NAMESPACES)
+
+    for element in elements:
+        ver = ''
+        # check for Redfish.Revisions
+        revisions = element.xpath(
+            'child::edm:Annotation[@Term=\'Redfish.Revisions\']/edm:Collection/edm:Record',
+            namespaces=ODATA_ALL_NAMESPACES)
+
+        if len(revisions) == 1:
+            props = revisions[0].xpath('child::edm:PropertyValue[@Property=\"Kind\"]',
+                                       namespaces=ODATA_ALL_NAMESPACES)
+            if len(props) == 1 and props[0].get('EnumMember') == 'Redfish.RevisionKind/Added':
+                return True
+
+    return False
+
+
+# This will sort the elements (e.g. properties or enums) based on the Redfish.Revisions Added
+# element_access - function to access each element
+## sort_function - sort function to use to sort the elements within a specific version
+def sort_by_version(elements, element_access, sort_function):
+    element_dict = {}
+    for element in elements:
+        ver = ''
+        # check for Redfish.Revision
+        revisions = element.xpath(
+            'child::edm:Annotation[@Term=\'Redfish.Revisions\']/edm:Collection/edm:Record',
+            namespaces=ODATA_ALL_NAMESPACES)
+
+        if len(revisions) == 1:
+            props = revisions[0].xpath('child::edm:PropertyValue[@Property=\"Kind\"]',
+                                       namespaces=ODATA_ALL_NAMESPACES)
+            if len(props) == 1 and props[0].get('EnumMember') == 'Redfish.RevisionKind/Added':
+                ver = revisions[0].xpath('child::edm:PropertyValue[@Property=\'Version\']',
+                                         namespaces=ODATA_ALL_NAMESPACES)[0].get('String')
+
+        if ver not in element_dict:
+            element_dict[ver] = []
+        element_dict[ver].append(element_access(element))
+
+    # sort the keys (the keys are the version strings).
+    sorted_element_dict = collections.OrderedDict(sorted(element_dict.items()))
+
+    # within each key (version) sort the properties alphanumerically
+    sorted_elements = []
+    for p in sorted_element_dict:
+        # alphabetically sort all the values as case insensitive
+        sorted_element_dict[p] = sorted(sorted_element_dict[p], key=sort_function)
+        for item in sorted_element_dict[p]:
+            sorted_elements.append(item)
+
+    return sorted_elements
+
+
+def get_properties(some_type, path=PROPERTY_PATH, can_sort_by_version=False):
     global verbose
 
     properties = []
     property_elements = some_type.xpath(path, namespaces=ODATA_ALL_NAMESPACES)
+
+    if can_sort_by_version:
+        property_elements = sort_by_version(property_elements, lambda p: p, lambda p: p.get('Name'))
+
     for property_element in property_elements:
         property_name = property_element.get('Name')
 
@@ -324,7 +387,8 @@ def add_entity_and_complex_types(doc, entity_repo):
             if is_parent_abstract(entity_type):
                 properties = get_base_properties(entity_type)
 
-            properties = properties + get_properties(entity_type)
+            can_sort_by_version = has_redfish_revisions_added(entity_type)
+            properties = properties + get_properties(entity_type, PROPERTY_PATH, can_sort_by_version)
 
             # add the entity only if it has at least one property
             if len(properties):
@@ -332,10 +396,14 @@ def add_entity_and_complex_types(doc, entity_repo):
                 if entity_type_name not in entity_repo:
                     entity_repo[entity_type_name] = ('Set', [])
 
+                # Use standard sort to sort properties (alphanumeric)
+                if not can_sort_by_version:
+                    properties = sorted(properties, key=itemgetter(0))
+
                 # sort and add to the map
                 # add only unique entries - this is to handle Swordfish vs Redfish conflicting schema (e.g. Volume)
                 entity_repo[entity_type_name][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].extend(
-                    [item for item in sorted(properties, key=itemgetter(0))
+                    [item for item in properties
                      if item not in entity_repo[entity_type_name][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]]
                 )
 
@@ -353,34 +421,11 @@ def add_enums(doc, entity_repo):
         if enum_type_name not in entity_repo:
             entity_repo[enum_type_name] = ('Enum', [])
 
-        enum_dict = {}
-        for enum_member in enum_type.xpath('child::edm:Member', namespaces=ODATA_ALL_NAMESPACES):
-            ver = ''
-            # check for Redfish.Revision
-            revisions = enum_member.xpath(
-                'child::edm:Annotation[@Term=\'Redfish.Revisions\']/edm:Collection/edm:Record',
-                namespaces=ODATA_ALL_NAMESPACES)
+        sorted_enums = sort_by_version(enum_type.xpath('child::edm:Member', namespaces=ODATA_ALL_NAMESPACES),
+                                       lambda p: p.get('Name'), lambda p: p.casefold())
 
-            if len(revisions) == 1:
-                props = revisions[0].xpath('child::edm:PropertyValue[@Property=\"Kind\"]',
-                                   namespaces=ODATA_ALL_NAMESPACES)
-                if len(props) == 1 and props[0].get('EnumMember') == 'Redfish.RevisionKind/Added':
-                    ver = revisions[0].xpath('child::edm:PropertyValue[@Property=\'Version\']',
-                                   namespaces=ODATA_ALL_NAMESPACES)[0].get('String')
-
-            if ver not in enum_dict:
-                enum_dict[ver] = []
-            enum_dict[ver].append(enum_member.get('Name'))
-
-        # sort the keys (the keys are the version strings).
-        sorted_enum_dict = collections.OrderedDict(sorted(enum_dict.items()))
-
-        # Add the sorted enum values to the entity repo
-        for e in sorted_enum_dict:
-            # alphabetically sort all the values as case insensitive
-            sorted_enum_dict[e] = sorted(sorted_enum_dict[e], key=lambda s: s.casefold())
-            for item in sorted_enum_dict[e]:
-                entity_repo[enum_type_name][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].append([item])
+        for item in sorted_enums:
+            entity_repo[enum_type_name][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX].append([item])
 
 
 def add_actions(doc, entity_repo):
