@@ -215,21 +215,22 @@ def has_redfish_revisions_added(entity):
 
 # This will sort the elements (e.g. properties or enums) based on the Redfish.Revisions Added
 # element_access - function to access each element
-## sort_function - sort function to use to sort the elements within a specific version
+# sort_function - sort function to use to sort the elements within a specific version
 def sort_by_version(elements, element_access, sort_function):
     element_dict = {}
     for element in elements:
         ver = ''
         # check for Redfish.Revision
-        revisions = element.xpath(
+        records = element.xpath(
             'child::edm:Annotation[@Term=\'Redfish.Revisions\']/edm:Collection/edm:Record',
             namespaces=ODATA_ALL_NAMESPACES)
 
-        if len(revisions) == 1:
-            props = revisions[0].xpath('child::edm:PropertyValue[@Property=\"Kind\"]',
+        # search for the 'Added' revision kind since there may be others such as 'Deprecated'.
+        for record in records:
+            props = record.xpath('child::edm:PropertyValue[@Property=\"Kind\"]',
                                        namespaces=ODATA_ALL_NAMESPACES)
             if len(props) == 1 and props[0].get('EnumMember') == 'Redfish.RevisionKind/Added':
-                ver = revisions[0].xpath('child::edm:PropertyValue[@Property=\'Version\']',
+                ver = record.xpath('child::edm:PropertyValue[@Property=\'Version\']',
                                          namespaces=ODATA_ALL_NAMESPACES)[0].get('String')
 
         if ver not in element_dict:
