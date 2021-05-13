@@ -478,9 +478,9 @@ def bej_decode(output_stream, input_stream, schema_dictionary, annotation_dictio
     flags = input_stream.read(2)
     assert (flags == bytes([0x00, 0x00]))
     schemaClass = input_stream.read(1)
-    assert(schemaClass in [bytes([0x00]), bytes([0x04])])
+    assert(schemaClass in [bytes([0x00]), bytes([0x01]), bytes([0x04])])
 
-    if schemaClass == bytes([0x00]): # Major schema class
+    if schemaClass == bytes([0x00]) or schemaClass == bytes([0x01]): # Major schema class or Event
         return bej_decode_stream(output_stream, input_stream, schema_dictionary, annotation_dictionary,
                                  load_dictionary_subset_by_key_sequence(schema_dictionary, 0, -1),
                                  BEJ_DICTIONARY_SELECTOR_MAJOR_SCHEMA,
