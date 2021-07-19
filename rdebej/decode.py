@@ -474,7 +474,7 @@ def bej_decode(output_stream, input_stream, schema_dictionary, annotation_dictio
     resource_link_to_pdr_map = pdr_map
     # strip off the headers
     version = input_stream.read(4)
-    assert(version == bytes([0x00, 0xF0, 0xF0, 0xF1]))
+    assert((version == bytes([0x00, 0xF0, 0xF0, 0xF1])) || (version == bytes([0x00, 0xF0, 0xF1, 0xF1])))
     flags = input_stream.read(2)
     assert (flags == bytes([0x00, 0x00]))
     schemaClass = input_stream.read(1)
