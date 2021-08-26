@@ -404,7 +404,7 @@ def is_dict_entry_nullable(dict_entry):
 
 
 def bej_encode_sflv(output_stream, schema_dict, annot_dict, dict_to_use, dict_entry, seq, format, json_value,
-                    pdr_map, format_flags, verbose, is_strict):
+                    pdr_map, format_flags, verbose, is_strict, preserve_odata_id_strings):
     success = True
     if is_dict_entry_nullable(dict_entry) and json_value == None:
         bej_pack_sfl(output_stream, seq, BEJ_FORMAT_NULL, 0, format_flags)
@@ -439,7 +439,7 @@ def bej_encode_sflv(output_stream, schema_dict, annot_dict, dict_to_use, dict_en
         nested_set_stream = bej_pack_set_start(output_stream, len(json_value))
         success = bej_encode_stream(nested_set_stream, json_value, schema_dict,
                                     annot_dict, dict_to_use, pdr_map, dict_entry[DICTIONARY_ENTRY_OFFSET],
-                                    dict_entry[DICTIONARY_ENTRY_CHILD_COUNT], verbose, is_strict)
+                                    dict_entry[DICTIONARY_ENTRY_CHILD_COUNT], verbose, is_strict, preserve_odata_id_strings)
         bej_pack_set_done(nested_set_stream, seq, format_flags)
 
     elif format == BEJ_FORMAT_ARRAY:
@@ -453,7 +453,7 @@ def bej_encode_sflv(output_stream, schema_dict, annot_dict, dict_to_use, dict_en
         for i in range(0, count):
             success = bej_encode_sflv(nested_stream, schema_dict, annot_dict, dict_to_use, array_dict_entry,
                                       (i << 1) | selector, array_dict_entry[DICTIONARY_ENTRY_FORMAT],
-                                      json_value[i], pdr_map, 0, verbose, is_strict)
+                                      json_value[i], pdr_map, 0, verbose, is_strict, preserve_odata_id_strings)
             if not success:
                 break
 
@@ -468,7 +468,7 @@ def bej_encode_sflv(output_stream, schema_dict, annot_dict, dict_to_use, dict_en
 
 
 def bej_encode_stream(output_stream, json_data, schema_dict, annot_dict, dict_to_use, pdr_map, offset=0,
-                      child_count=-1, verbose=False, is_strict=False):
+                      child_count=-1, verbose=False, is_strict=False, preserve_odata_id_strings=False):
     global current_available_pdr
     dict_entries = load_dictionary_subset_by_key_name(dict_to_use, offset, child_count)
     success = True
@@ -520,16 +520,16 @@ def bej_encode_stream(output_stream, json_data, schema_dict, annot_dict, dict_to
 
                 success = bej_encode_sflv(nested_stream, schema_dict, annot_dict, tmp_dict_to_use, entry,
                                           sequence_number_with_dictionary_selector, entry[DICTIONARY_ENTRY_FORMAT],
-                                          json_data[prop], pdr_map, format_flags, verbose, is_strict)
+                                          json_data[prop], pdr_map, format_flags, verbose, is_strict, preserve_odata_id_strings)
 
                 bej_pack_property_annotation_done(nested_stream, prop_seq)
             else:
                 json_value = json_data[prop]
                 # Special handling for '@odata.id' deferred binding string
-                if prop == '@odata.id' and prop_format == BEJ_FORMAT_STRING:
+                if prop == '@odata.id' and prop_format == BEJ_FORMAT_STRING and not preserve_odata_id_strings:
                     if is_strict:
                         prop_format = BEJ_FORMAT_RESOURCE_LINK
-                    else:    
+                    else:
                         global current_available_pdr
                         # Add an entry to the PDR map
                         # Special case frags by only including the string preceeding the '#' into
@@ -546,7 +546,7 @@ def bej_encode_stream(output_stream, json_data, schema_dict, annot_dict, dict_to
 
                 success = bej_encode_sflv(output_stream, schema_dict, annot_dict, tmp_dict_to_use, entry,
                                           sequence_number_with_dictionary_selector, prop_format, json_value, pdr_map,
-                                          format_flags, verbose, is_strict)
+                                          format_flags, verbose, is_strict, preserve_odata_id_strings)
         else:
             if verbose:
                 print('Property cannot be encoded - missing dictionary entry', prop)
@@ -558,7 +558,8 @@ def bej_encode_stream(output_stream, json_data, schema_dict, annot_dict, dict_to
     return success
 
 
-def bej_encode(output_stream, json_data, schema_dict, annot_dict, verbose=False, resource_link_to_pdr_map=None, version=None):
+def bej_encode(output_stream, json_data, schema_dict, annot_dict, verbose=False, resource_link_to_pdr_map=None,
+               version=None, preserve_odata_id_strings=False):
     """
     BEJ encode JSON data into an output stream
 
@@ -576,7 +577,7 @@ def bej_encode(output_stream, json_data, schema_dict, annot_dict, verbose=False,
 
     bej_version = 0xF1F0F000
     pdr_map = {}
-    is_strict = False;
+    is_strict = False
     if version:
         bej_version = version
     if resource_link_to_pdr_map:
@@ -592,7 +593,7 @@ def bej_encode(output_stream, json_data, schema_dict, annot_dict, verbose=False,
     dict_stream = DictionaryByteArrayStream(schema_dict)
     entry = dict_stream.get_next_entry()
     success = bej_encode_stream(new_stream, json_data, schema_dict, annot_dict, schema_dict, pdr_map, entry[DICTIONARY_ENTRY_OFFSET],
-                                entry[DICTIONARY_ENTRY_CHILD_COUNT], verbose, is_strict)
+                                entry[DICTIONARY_ENTRY_CHILD_COUNT], verbose, is_strict, preserve_odata_id_strings)
     if success:
         bej_pack_set_done(new_stream, 0)
     return success, pdr_map
