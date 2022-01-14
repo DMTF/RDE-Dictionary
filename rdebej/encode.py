@@ -558,6 +558,56 @@ def bej_encode_stream(output_stream, json_data, schema_dict, annot_dict, dict_to
     return success
 
 
+def bej_action_encode(output_stream, json_data, schema_dict, annot_dict, action_name, verbose=False,
+                        resource_link_to_pdr_map=None, version=None, preserve_odata_id_strings=False):
+    """
+    BEJ encode Action request payload JSON data into an output stream
+
+    Args:
+        output_stream: Stream to dump BEJ data into
+        json_data: JSON string
+        schema_dict: The RDE schema dictionary to use to encode the BEJ
+        annot_dict: The RDE annotation dictionary to use to encode the BEJ
+        action_name: The field string (name) of the particular Action being requested
+        resource_link_to_pdr_map: Map of uri to resource id
+        bej_version: BEJ version to use in payload
+
+    Return:
+        Returns a tuple (True, pdr_map) to indicate success, (False, None) otherwise.
+    """
+    bej_version = 0xF1F0F000
+    pdr_map = {}
+    is_strict = False
+    if version:
+        bej_version = version
+    if resource_link_to_pdr_map:
+        pdr_map = resource_link_to_pdr_map
+        is_strict = True
+
+    # Skip ahead to Action subset in dictionary
+    dict_stream = DictionaryByteArrayStream(schema_dict)
+    resource_entry = dict_stream.get_next_entry()
+    resource_prop_entries = load_dictionary_subset_by_key_name(schema_dict, resource_entry[DICTIONARY_ENTRY_OFFSET],
+                                                                resource_entry[DICTIONARY_ENTRY_CHILD_COUNT])
+    actions_entry = resource_prop_entries['Actions']
+    actions_subset_entries = load_dictionary_subset_by_key_name(schema_dict, actions_entry[DICTIONARY_ENTRY_OFFSET],
+                                                                actions_entry[DICTIONARY_ENTRY_CHILD_COUNT])
+    requested_action_entry = actions_subset_entries[action_name]
+
+    # Add header info
+    output_stream.write(bej_version.to_bytes(4, 'little'))  # BEJ Version
+    output_stream.write(0x0000.to_bytes(2, 'little'))  # BEJ flags
+    output_stream.write(0x00.to_bytes(1, 'little'))  # schemaClass - MAJOR only for now
+
+    # Encode the bejTuple
+    new_stream = bej_pack_set_start(output_stream, len(json_data))
+    success = bej_encode_stream(new_stream, json_data, schema_dict, annot_dict, schema_dict, pdr_map, requested_action_entry[DICTIONARY_ENTRY_OFFSET],
+                                requested_action_entry[DICTIONARY_ENTRY_CHILD_COUNT], verbose, is_strict, preserve_odata_id_strings)
+    if success:
+        bej_pack_set_done(new_stream, 0)
+    return success, pdr_map
+
+
 def bej_encode(output_stream, json_data, schema_dict, annot_dict, verbose=False, resource_link_to_pdr_map=None,
                version=None, preserve_odata_id_strings=False):
     """
