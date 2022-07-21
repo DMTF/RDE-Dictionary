@@ -585,6 +585,23 @@ def get_latest_version(entity):
         return 'v0_0_0'
 
 
+def bcd(bin_value):
+    # Double-dabble algorithm for converting binary to BCD
+    # Ref: https://blog.smittytone.net/2020/12/03/clock-design-explore-bcd/
+    for i in range(0, 8):
+        bin_value = bin_value << 1
+
+        if i == 7: break
+
+        if (bin_value & 0xf00) > 0x4ff:
+            bin_value += 0x300
+
+        if (bin_value & 0xf000) > 0x4fff:
+            bin_value += 0x3000
+
+    return (bin_value >> 8) & 0xff
+
+
 def to_ver32(version):
     """
     Converts version in Redfish format (e.g. v1_0_0) to a PLDM ver32
@@ -598,9 +615,10 @@ def to_ver32(version):
 
     # The last item in result will have the latest version
     if version != 'v0_0_0':  # This is a versioned namespace
-        ver_array = version[1:].split('_')   # skip the 'v' and split the major, minor and errata
-        ver_number = ((int(ver_array[0]) | 0xF0) << 24) | ((int(ver_array[1]) | 0xF0) << 16) | ((int(ver_array[2])
-                                                                                                 | 0xF0) << 8)
+        ver_array = [int(i) for i in version[1:].split('_')]   # skip the 'v' and split the major, minor and errata
+        bcd_array = list(map(bcd, ver_array))
+        bcd_array = [((d | 0xf0) if not (d & 0xf0) else d) for d in bcd_array]
+        ver_number = (bcd_array[0] << 24) | (bcd_array[1] << 16) | (bcd_array[2] << 8)
         return ver_number
     else:  # This is an un-versioned entity, return v0_0_0
         return 0xFFFFFFFF
