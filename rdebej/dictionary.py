@@ -624,6 +624,21 @@ def to_ver32(version):
         return 0xFFFFFFFF
 
 
+def ver32_to_strings(ver32):
+    field_strings = []
+    ver_bytes = list(ver32.to_bytes(4, 'big'))[:3]
+
+    for b in ver_bytes:
+        if b & 0xf0 == 0xf0:
+            field_strings.append(b & 0x0f)
+        else:
+            field_strings.append(((b & 0xf0) >> 4) * 10 + (b & 0x0f))
+
+    field_strings = list(map(str, field_strings))
+
+    return field_strings
+
+
 def to_redfish_version(ver32):
     """
     Converts a PLDM ver32 number to a Redfish version in the format vMajor_Minor_Errata
@@ -631,7 +646,8 @@ def to_redfish_version(ver32):
     if ver32 == 0xFFFFFFFF:  # un-versioned
         return ''
     else:
-        return 'v'+str((ver32 >> 24) & 0x0F)+'_'+str((ver32 >> 16) & 0x0F)+'_'+str((ver32 >> 8) & 0x0F)
+        version_field_strings = ver32_to_strings(ver32)
+        return 'v'+version_field_strings[0]+'_'+version_field_strings[1]+'_'+version_field_strings[2]
 
 
 def get_latest_version_as_ver32(entity):
