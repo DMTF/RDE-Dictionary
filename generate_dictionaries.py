@@ -149,7 +149,7 @@ if __name__ == '__main__':
         annotation_dictionary = dictionary.generate_annotation_schema_dictionary(
             schema_dir_csdl,
             schema_dir_json,
-            'v1_0_0'
+            'v1_1_0'
         )
 
         if annotation_dictionary and annotation_dictionary.dictionary \
