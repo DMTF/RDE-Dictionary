@@ -27,6 +27,7 @@ import binascii
 import glob
 import collections
 from ._internal_utils import *
+from functools import cmp_to_key
 
 # OData types
 ODATA_ENUM_TYPE = '{http://docs.oasis-open.org/odata/ns/edm}EnumType'
@@ -481,6 +482,15 @@ def find_json_schema_source(json_schema_dirs, filename):
     return ''
 
 
+def get_version_fields(version):
+    fields = []
+    if re.compile('^v\d+_\d+_\d$').search(version) is not None:
+        m = re.compile('v(\d+)_(\d+)_(\d+)').search(version)
+        for i in [1, 2, 3]:
+            fields.append(m.group(i))
+    return tuple(fields)
+
+
 def is_version_greater_than(version_to_compare, filename):
     """
     Return True if filename has a version greater than version_to_compare
@@ -493,7 +503,16 @@ def is_version_greater_than(version_to_compare, filename):
         True if filename version greater than version_to_compare, False otherwise
     """
     [base_filename, version, extension] = filename.split('.')
-    return to_ver32(version) > to_ver32(version_to_compare)
+    version_fields = get_version_fields(version)
+    version_to_compare_fields = get_version_fields(version_to_compare)
+
+    if version_fields[0] == version_to_compare_fields[0]:
+        if version_fields[1] == version_to_compare_fields[1]:
+            return version_fields[2] > version_to_compare_fields[2]
+        else:
+            return version_fields[1] > version_to_compare_fields[1]
+    else:
+        return version_fields[0] > version_to_compare_fields[0]
 
 
 def find_json_schema_files_with_version(json_schema_dirs, filename):
@@ -516,6 +535,7 @@ def find_json_schema_files_with_version(json_schema_dirs, filename):
 
     # remove any filenames with version > highest_version
     filenames = [x for x in filenames if not is_version_greater_than(highest_version, os.path.basename(x))]
+    filenames.sort(key=cmp_to_key(schema_version_string_compare), reverse=True)
 
     return filenames
 
@@ -1496,6 +1516,37 @@ def print_binary_dictionary(byte_array):
 SchemaDictionary = namedtuple('SchemaDictionary', 'dictionary dictionary_byte_array json_dictionary')
 
 
+def schema_version_string_compare(lhs, rhs):
+    lhs_version_matcher = re.compile('\.v(\d+)_(\d+)_(\d+)\.json').search(lhs)
+    rhs_version_matcher = re.compile('\.v(\d+)_(\d+)_(\d+)\.json').search(rhs)
+
+    major_diff = int(lhs_version_matcher.group(1)) - int(rhs_version_matcher.group(1))
+    minor_diff = int(lhs_version_matcher.group(2)) - int(rhs_version_matcher.group(2))
+    update_diff = int(lhs_version_matcher.group(3)) - int(rhs_version_matcher.group(3))
+
+    if major_diff == 0:
+        if minor_diff == 0:
+            return update_diff
+        else:
+            return minor_diff
+    else:
+        return major_diff
+
+
+def get_latest_annotation_dictionary_version(json_schema_dirs):
+    annotation_versions = []
+    for json_dir in json_schema_dirs:
+        pinned_schema = os.path.join(json_dir, 'redfish-payload-annotations-v1.json')
+        with open(pinned_schema) as f:
+            schema_contents = json.load(f)
+            m = re.compile('\.(v\d+_\d+_\d+)\.json').search(schema_contents['$id']).group(1)
+            annotation_versions.append(m)
+
+    if len(annotation_versions) > 1:
+        annotation_versions.sort(key=cmp_to_key(schema_version_string_compare))
+    return annotation_versions[-1]
+
+
 def generate_annotation_schema_dictionary(csdl_schema_dirs, json_schema_dirs, version=None, copyright=None):
     """ Generate the annotation schema dictionary.
 
@@ -1544,6 +1595,8 @@ def generate_annotation_schema_dictionary(csdl_schema_dirs, json_schema_dirs, ve
     # search for entity and build dictionary
     if entity in entity_repo:
         ver = ''
+        if version == 'v1':
+            version = get_latest_annotation_dictionary_version(json_schema_dirs)
         dictionary = generate_annotation_dictionary(version, json_schema_dirs, entity_repo, entity_offset_map)
         ver = to_ver32(version)
 
