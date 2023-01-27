@@ -1,7 +1,6 @@
 language: python
 python:
    - "3.6"
-   - "3.7"
    - "3.8"
    - "3.9"
    - "3.10-dev"
@@ -10,7 +9,6 @@ env:
    - PIPENV_IGNORE_VIRTUALENVS=1
 
 install:
-   - pip install -U importlib_metadata
    - pip install pipenv
    - pipenv install --dev
    
