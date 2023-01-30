@@ -75,16 +75,10 @@ def find_num_bytes_and_msb(value):
         return 1, 0xff
 
     # use a big endian byte array (MSB is at index 0) as it is easier to eliminate the padding
-    if value > 0:
-        value_byte_array = twos_complement(value, 64).to_bytes(NUM_BYTES_FOR_INTEGER, 'big')
-        for index, val in enumerate(value_byte_array):
-            if val != 0x00:
-                return NUM_BYTES_FOR_INTEGER - index, val
-    else:
-        value_byte_array = twos_complement(value, 64).to_bytes(NUM_BYTES_FOR_INTEGER, 'little')
-        for index, val in enumerate(value_byte_array):
-            if val & 0x80:
-                return index+1, val
+    value_byte_array = twos_complement(value, 64).to_bytes(NUM_BYTES_FOR_INTEGER, 'big')
+    for index, val in enumerate(value_byte_array):
+        if (value > 0 and val != 0x00) or (value < 0 and val != 0xff):
+            return NUM_BYTES_FOR_INTEGER - index, val
 
 
 def num_bytes_for_unsigned_integer(value):
@@ -173,8 +167,8 @@ def get_num_bytes_and_padding(value):
     num_bytes_for_value, msb = find_num_bytes_and_msb(value)
     # determine if padding is required to guarantee 2's complement
     is_padding_required = False
-    if value > 0 and (msb & 0x80):
-        # add one more byte to the msb to guarantee highest MSb is zero
+    if (value > 0 and (msb & 0x80)) or (value < 0 and not (msb & 0x80)):
+        # add one more byte to the msb to guarantee highest MSb is zero (or 0xff for negative ints)
         is_padding_required = True
 
     return num_bytes_for_value, is_padding_required
@@ -185,7 +179,7 @@ def bej_pack_v_integer(stream, value, num_bytes_for_value, is_padding_required):
     num_bytes_packed = stream.write(twos_complement(value, 64).to_bytes(8, 'little')[:num_bytes_for_value])
     # add padding if needed
     if is_padding_required:
-        pad = 0
+        pad = 0 if value > 0 else 0xff
         num_bytes_packed += stream.write(pad.to_bytes(1, 'little'))
 
     return num_bytes_packed

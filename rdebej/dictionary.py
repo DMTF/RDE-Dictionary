@@ -27,6 +27,7 @@ import binascii
 import glob
 import collections
 from ._internal_utils import *
+from functools import cmp_to_key
 
 # OData types
 ODATA_ENUM_TYPE = '{http://docs.oasis-open.org/odata/ns/edm}EnumType'
@@ -481,6 +482,15 @@ def find_json_schema_source(json_schema_dirs, filename):
     return ''
 
 
+def get_version_fields(version):
+    fields = []
+    if re.compile('^v\d+_\d+_\d$').search(version) is not None:
+        m = re.compile('v(\d+)_(\d+)_(\d+)').search(version)
+        for i in [1, 2, 3]:
+            fields.append(m.group(i))
+    return tuple(fields)
+
+
 def is_version_greater_than(version_to_compare, filename):
     """
     Return True if filename has a version greater than version_to_compare
@@ -493,7 +503,16 @@ def is_version_greater_than(version_to_compare, filename):
         True if filename version greater than version_to_compare, False otherwise
     """
     [base_filename, version, extension] = filename.split('.')
-    return to_ver32(version) > to_ver32(version_to_compare)
+    version_fields = get_version_fields(version)
+    version_to_compare_fields = get_version_fields(version_to_compare)
+
+    if version_fields[0] == version_to_compare_fields[0]:
+        if version_fields[1] == version_to_compare_fields[1]:
+            return version_fields[2] > version_to_compare_fields[2]
+        else:
+            return version_fields[1] > version_to_compare_fields[1]
+    else:
+        return version_fields[0] > version_to_compare_fields[0]
 
 
 def find_json_schema_files_with_version(json_schema_dirs, filename):
@@ -516,6 +535,7 @@ def find_json_schema_files_with_version(json_schema_dirs, filename):
 
     # remove any filenames with version > highest_version
     filenames = [x for x in filenames if not is_version_greater_than(highest_version, os.path.basename(x))]
+    filenames.sort(key=cmp_to_key(schema_version_string_compare), reverse=True)
 
     return filenames
 
@@ -585,6 +605,23 @@ def get_latest_version(entity):
         return 'v0_0_0'
 
 
+def bcd(bin_value):
+    # Double-dabble algorithm for converting binary to BCD
+    # Ref: https://blog.smittytone.net/2020/12/03/clock-design-explore-bcd/
+    for i in range(0, 8):
+        bin_value = bin_value << 1
+
+        if i == 7: break
+
+        if (bin_value & 0xf00) > 0x4ff:
+            bin_value += 0x300
+
+        if (bin_value & 0xf000) > 0x4fff:
+            bin_value += 0x3000
+
+    return (bin_value >> 8) & 0xff
+
+
 def to_ver32(version):
     """
     Converts version in Redfish format (e.g. v1_0_0) to a PLDM ver32
@@ -598,12 +635,28 @@ def to_ver32(version):
 
     # The last item in result will have the latest version
     if version != 'v0_0_0':  # This is a versioned namespace
-        ver_array = version[1:].split('_')   # skip the 'v' and split the major, minor and errata
-        ver_number = ((int(ver_array[0]) | 0xF0) << 24) | ((int(ver_array[1]) | 0xF0) << 16) | ((int(ver_array[2])
-                                                                                                 | 0xF0) << 8)
+        ver_array = [int(i) for i in version[1:].split('_')]   # skip the 'v' and split the major, minor and errata
+        bcd_array = list(map(bcd, ver_array))
+        bcd_array = [((d | 0xf0) if not (d & 0xf0) else d) for d in bcd_array]
+        ver_number = (bcd_array[0] << 24) | (bcd_array[1] << 16) | (bcd_array[2] << 8)
         return ver_number
     else:  # This is an un-versioned entity, return v0_0_0
         return 0xFFFFFFFF
+
+
+def ver32_to_strings(ver32):
+    field_strings = []
+    ver_bytes = list(ver32.to_bytes(4, 'big'))[:3]
+
+    for b in ver_bytes:
+        if b & 0xf0 == 0xf0:
+            field_strings.append(b & 0x0f)
+        else:
+            field_strings.append(((b & 0xf0) >> 4) * 10 + (b & 0x0f))
+
+    field_strings = list(map(str, field_strings))
+
+    return field_strings
 
 
 def to_redfish_version(ver32):
@@ -613,7 +666,8 @@ def to_redfish_version(ver32):
     if ver32 == 0xFFFFFFFF:  # un-versioned
         return ''
     else:
-        return 'v'+str((ver32 >> 24) & 0x0F)+'_'+str((ver32 >> 16) & 0x0F)+'_'+str((ver32 >> 8) & 0x0F)
+        version_field_strings = ver32_to_strings(ver32)
+        return 'v'+version_field_strings[0]+'_'+version_field_strings[1]+'_'+version_field_strings[2]
 
 
 def get_latest_version_as_ver32(entity):
@@ -1462,6 +1516,37 @@ def print_binary_dictionary(byte_array):
 SchemaDictionary = namedtuple('SchemaDictionary', 'dictionary dictionary_byte_array json_dictionary')
 
 
+def schema_version_string_compare(lhs, rhs):
+    lhs_version_matcher = re.compile('\.v(\d+)_(\d+)_(\d+)\.json').search(lhs)
+    rhs_version_matcher = re.compile('\.v(\d+)_(\d+)_(\d+)\.json').search(rhs)
+
+    major_diff = int(lhs_version_matcher.group(1)) - int(rhs_version_matcher.group(1))
+    minor_diff = int(lhs_version_matcher.group(2)) - int(rhs_version_matcher.group(2))
+    update_diff = int(lhs_version_matcher.group(3)) - int(rhs_version_matcher.group(3))
+
+    if major_diff == 0:
+        if minor_diff == 0:
+            return update_diff
+        else:
+            return minor_diff
+    else:
+        return major_diff
+
+
+def get_latest_annotation_dictionary_version(json_schema_dirs):
+    annotation_versions = []
+    for json_dir in json_schema_dirs:
+        pinned_schema = os.path.join(json_dir, 'redfish-payload-annotations-v1.json')
+        with open(pinned_schema) as f:
+            schema_contents = json.load(f)
+            m = re.compile('\.(v\d+_\d+_\d+)\.json').search(schema_contents['$id']).group(1)
+            annotation_versions.append(m)
+
+    if len(annotation_versions) > 1:
+        annotation_versions.sort(key=cmp_to_key(schema_version_string_compare))
+    return annotation_versions[-1]
+
+
 def generate_annotation_schema_dictionary(csdl_schema_dirs, json_schema_dirs, version=None, copyright=None):
     """ Generate the annotation schema dictionary.
 
@@ -1510,6 +1595,8 @@ def generate_annotation_schema_dictionary(csdl_schema_dirs, json_schema_dirs, ve
     # search for entity and build dictionary
     if entity in entity_repo:
         ver = ''
+        if version == 'v1':
+            version = get_latest_annotation_dictionary_version(json_schema_dirs)
         dictionary = generate_annotation_dictionary(version, json_schema_dirs, entity_repo, entity_offset_map)
         ver = to_ver32(version)
 
