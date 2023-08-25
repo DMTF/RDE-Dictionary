@@ -119,7 +119,7 @@
                 "sha256:90400ecfa87bac36ac75dfa7b62e83a02017b51759f6eef4494e4de775b2b4be"
             ],
             "index": "pypi",
-            "version": "==3.1.5"
+            "version": "==3.1.32"
         },
         "idna": {
             "hashes": [
