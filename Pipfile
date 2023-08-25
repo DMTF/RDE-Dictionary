@@ -11,3 +11,4 @@ lxml = "*"
 tabulate = "*"
 GitPython = "*"
 requests = "*"
+
