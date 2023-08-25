@@ -1,3 +1,5 @@
 lxml
 tabulate
 gitpython
+requests
+
