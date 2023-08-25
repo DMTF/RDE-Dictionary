@@ -1,5 +1,3 @@
 lxml
 tabulate
 gitpython
-requests
-behave
