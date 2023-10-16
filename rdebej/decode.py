@@ -339,7 +339,7 @@ def bej_decode_stream(output_stream, input_stream, schema_dict, annot_dict, entr
                 bej_decode_name(annot_dict, seq, selector, flags,  entries_by_seq, entries_by_seq_selector, output_stream)
 
             if is_deferred_binding:
-                bindings_to_resolve = re.findall('(%M|%[LTPI][0-9]+)\.?[0-9]*.*?', value)
+                bindings_to_resolve = re.findall('(%[BCMSU]|%[LTPI][0-9]+)\.?[0-9]*.*?', value)
                 for binding in bindings_to_resolve:
                     if binding in deferred_binding_strings:
                         value = value.replace(binding, deferred_binding_strings[binding])
