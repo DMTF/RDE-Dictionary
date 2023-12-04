@@ -403,22 +403,22 @@ def bej_encode_sflv(output_stream, schema_dict, annot_dict, dict_to_use, dict_en
     if is_dict_entry_nullable(dict_entry) and json_value == None:
         bej_pack_sfl(output_stream, seq, BEJ_FORMAT_NULL, 0, format_flags)
 
-    elif format == BEJ_FORMAT_STRING:
+    elif format == BEJ_FORMAT_STRING and isinstance(json_value, str):
         bej_pack_sflv_string(output_stream, seq, json_value, format_flags)
 
-    elif format == BEJ_FORMAT_INTEGER:
+    elif format == BEJ_FORMAT_INTEGER and isinstance(json_value, int):
         bej_pack_sflv_integer(output_stream, seq, json_value, format_flags)
 
-    elif format == BEJ_FORMAT_REAL:
+    elif format == BEJ_FORMAT_REAL and isinstance(json_value, (float, int)):
         bej_pack_sflv_real(output_stream, seq, json_value, format_flags)
 
-    elif format == BEJ_FORMAT_BOOLEAN:
+    elif format == BEJ_FORMAT_BOOLEAN and isinstance(json_value, bool):
         bej_pack_sflv_boolean(output_stream, seq, json_value, format_flags)
 
-    elif format == BEJ_FORMAT_ENUM:
+    elif format == BEJ_FORMAT_ENUM and isinstance(json_value, str):
         bej_encode_enum(output_stream, dict_to_use, dict_entry, seq, json_value, format_flags)
 
-    elif format == BEJ_FORMAT_RESOURCE_LINK:
+    elif format == BEJ_FORMAT_RESOURCE_LINK and isinstance(json_value, str):
         global current_available_pdr
         # add an entry to the PDR
         if json_value not in pdr_map:
