@@ -167,9 +167,19 @@ def get_num_bytes_and_padding(value):
     num_bytes_for_value, msb = find_num_bytes_and_msb(value)
     # determine if padding is required to guarantee 2's complement
     is_padding_required = False
-    if (value > 0 and (msb & 0x80)) or (value < 0 and not (msb & 0x80)):
-        # add one more byte to the msb to guarantee highest MSb is zero (or 0xff for negative ints)
-        is_padding_required = True
+
+    # determine if we are using a fixed length of integer
+    if fixed_integer_length != 0:
+        # pack the value with the fixed length if the length of value < fixed_integer_length specified in to option "-fi".
+        if num_bytes_for_value <= fixed_integer_length:
+            is_padding_required = num_bytes_for_value < fixed_integer_length
+        else:
+            assert False, 'Value length ' + str(num_bytes_for_value) + ' byte(s) is great than the fixed integer length specified to -fi (' + str(fixed_integer_length) + ' byte(s))'
+
+    else:
+        if (value > 0 and (msb & 0x80)) or (value < 0 and not (msb & 0x80)):
+            # add one more byte to the msb to guarantee highest MSb is zero (or 0xff for negative ints)
+            is_padding_required = True
 
     return num_bytes_for_value, is_padding_required
 
@@ -179,8 +189,10 @@ def bej_pack_v_integer(stream, value, num_bytes_for_value, is_padding_required):
     num_bytes_packed = stream.write(twos_complement(value, 64).to_bytes(8, 'little')[:num_bytes_for_value])
     # add padding if needed
     if is_padding_required:
-        pad = 0 if value > 0 else 0xff
-        num_bytes_packed += stream.write(pad.to_bytes(1, 'little'))
+        pad = 0 if value >= 0 else 0xff
+        pad_length = 1 if fixed_integer_length == 0 else fixed_integer_length - num_bytes_for_value
+        for _ in range (pad_length):
+            num_bytes_packed += stream.write(pad.to_bytes(1, 'little'))
 
     return num_bytes_packed
 
@@ -189,7 +201,9 @@ def bej_pack_sflv_integer(stream, seq_num, value, format_flags):
     num_bytes_for_value, is_padding_required = get_num_bytes_and_padding(value)
 
     num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_INTEGER,
-                                    num_bytes_for_value+1 if is_padding_required else num_bytes_for_value, format_flags)
+                                    fixed_integer_length if fixed_integer_length else
+                                    num_bytes_for_value+1 if is_padding_required else num_bytes_for_value,
+                                    format_flags)
 
     # pack the value
     num_bytes_packed += bej_pack_v_integer(stream, value, num_bytes_for_value, is_padding_required)
@@ -603,7 +617,7 @@ def bej_action_encode(output_stream, json_data, schema_dict, annot_dict, action_
 
 
 def bej_encode(output_stream, json_data, schema_dict, annot_dict, verbose=False, resource_link_to_pdr_map=None,
-               version=None, preserve_odata_id_strings=False):
+               version=None, preserve_odata_id_strings=False, fixed_int_len=0):
     """
     BEJ encode JSON data into an output stream
 
@@ -619,6 +633,8 @@ def bej_encode(output_stream, json_data, schema_dict, annot_dict, verbose=False,
         Returns a tuple (True, pdr_map) to indicate success, (False, None) otherwise.
     """
 
+    global fixed_integer_length
+    fixed_integer_length = fixed_int_len
     bej_version = 0xF1F0F000
     pdr_map = {}
     is_strict = False
