@@ -31,6 +31,13 @@ if __name__ == '__main__':
     encode_parser.add_argument('-j',  '--jsonFile', type=argparse.FileType('r'), required=False)
     encode_parser.add_argument('-o',  '--bejOutputFile', type=argparse.FileType('wb'), required=False)
     encode_parser.add_argument('-op', '--pdrMapFile', type=argparse.FileType('w'), required=False)
+    encode_parser.add_argument('-fi', '--fixedIntegerLength', required=False, default=0,
+                               help="Pack the integer with the fixed length."
+                                    "Fixed length integer doesn't have the padding zero byte for the MSB of value set to 1."
+                                    "That is the consumer's prerequisite knowdlege of the value characteristic."
+                                    "For example: -fi=4 gives all of the integer in 4-byte. Throw an error message if there"
+                                    "is an integer which length in byte is greater than 4-byte."
+                               )
 
     decode_parser = subparsers.add_parser('decode')
     decode_parser.add_argument('-s', '--schemaDictionary', type=argparse.FileType('rb'), required=True)
@@ -70,7 +77,7 @@ if __name__ == '__main__':
 
         # create a byte stream
         output_stream = io.BytesIO()
-        success, pdr_map = encode.bej_encode(output_stream, json_to_encode, schema_dictionary, annotation_dictionary)
+        success, pdr_map = encode.bej_encode(output_stream, json_to_encode, schema_dictionary, annotation_dictionary, fixed_int_len=int(args.fixedIntegerLength))
         if success:
             encoded_bytes = output_stream.getvalue()
             if not silent:
