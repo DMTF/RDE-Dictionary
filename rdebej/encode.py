@@ -133,8 +133,17 @@ def bej_pack_sfl(stream, seq_num, format, length, format_flags):
 
 
 def bej_pack_sflv_string(stream, seq_num, str, format_flags):
-    str = str.replace('"', '\\"')
-    num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_STRING, len(str) + 1, format_flags)
+    escape_sequences = [
+        ('\\', '\\\\'),
+        ('"',  '\\"'),
+        ('/',  '\\/'),
+        ('\b', '\\b'),
+        ('\f', '\\f'),
+        ('\n', '\\n'),
+        ('\r', '\\r')
+    ]
+    for old, new in escape_sequences:
+        str = str.replace(old, new)
 
     # pack str
     null = 0
