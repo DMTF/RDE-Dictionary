@@ -145,6 +145,8 @@ def bej_pack_sflv_string(stream, seq_num, str, format_flags):
     for old, new in escape_sequences:
         str = str.replace(old, new)
 
+    num_bytes_packed = bej_pack_sfl(stream, seq_num, BEJ_FORMAT_STRING, len(str) + 1, format_flags)
+
     # pack str
     null = 0
     num_bytes_packed += stream.write(str.encode())
