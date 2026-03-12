@@ -1260,14 +1260,21 @@ def build_requirements(obj, required_properties, entity, entity_repo):
         for prop in obj['PropertyRequirements'].items():
             if isinstance(prop[1], dict):  # prop[0] is the prop name, prop[1] is the prop requirements
                 # find the entry in the entity_repo that corresponds to this property
+                is_found = False
                 for entity_repo_prop in entity_repo[entity][ENTITY_REPO_TUPLE_PROPERTY_LIST_INDEX]:
                     if prop[0] == entity_repo_prop[ENTITY_REPO_ENTRY_PROPERTY_NAME]:
+                        is_found = True
                         required_properties[entity].append(prop[0])
                         if entity_repo_prop[ENTITY_REPO_ENTRY_TYPE] == 'Set' or \
                                 entity_repo_prop[ENTITY_REPO_ENTRY_TYPE] == 'Enum' or \
                                 entity_repo_prop[ENTITY_REPO_ENTRY_TYPE] == 'Array' :
                             build_requirements(prop[1], required_properties,
                                                entity_repo_prop[ENTITY_REPO_ENTRY_REFERENCE], entity_repo)
+                # Throw an error if the profile property is not found in the schema
+                # (ignore annotation properties)
+                if not is_found and '@' not in prop[0]:
+                    raise Exception("Profile property not found in schema", prop[0])
+
     if 'Values' in obj: # For enums
         if entity not in required_properties:
             required_properties[entity] = []
