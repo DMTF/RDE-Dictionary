@@ -36,6 +36,7 @@ ODATA_TYPE_DEFINITION = '{http://docs.oasis-open.org/odata/ns/edm}TypeDefinition
 ODATA_ENTITY_TYPE = '{http://docs.oasis-open.org/odata/ns/edm}EntityType'
 ODATA_NAVIGATION_PROPERTY = '{http://docs.oasis-open.org/odata/ns/edm}NavigationProperty'
 ODATA_ACTION_TYPE = '{http://docs.oasis-open.org/odata/ns/edm}Action'
+ODATA_PARAMETER_TYPE = '{http://docs.oasis-open.org/odata/ns/edm}Parameter'
 ODATA_TERM_TYPE = '{http://docs.oasis-open.org/odata/ns/edm}Term'
 ODATA_ALL_NAMESPACES = {'edm': 'http://docs.oasis-open.org/odata/ns/edm', 'edmx': 'http://docs.oasis-open.org/odata/ns/edmx'}
 
@@ -274,7 +275,8 @@ def get_properties(some_type, path=PROPERTY_PATH, can_sort_by_version=False):
 
         property_flags = property_is_nullable_flag + ',' + property_permissions
 
-        is_auto_expand = property_element.tag != ODATA_NAVIGATION_PROPERTY \
+        is_auto_expand = (property_element.tag != ODATA_NAVIGATION_PROPERTY \
+                          and property_element.tag != ODATA_PARAMETER_TYPE) \
             or (property_element.tag == ODATA_NAVIGATION_PROPERTY
                 and len(property_element.xpath('child::edm:Annotation[@Term=\'OData.AutoExpand\']',
                                                namespaces=ODATA_ALL_NAMESPACES)))
