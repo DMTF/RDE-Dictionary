@@ -25,6 +25,9 @@ NUM_BYTES_FOR_INTEGER = 8
 VALID_ASCII_PRINT_CHARS = string.ascii_letters + string.hexdigits + string.punctuation
 
 
+fixed_integer_length = 0
+
+
 def print_hex(byte_buf, max_size=None, add_line_number=True, show_ascii=True):
     """
     Prints a byte array as hex dump
@@ -578,7 +581,8 @@ def bej_encode_stream(output_stream, json_data, schema_dict, annot_dict, dict_to
 
 
 def bej_action_encode(output_stream, json_data, schema_dict, annot_dict, action_name, verbose=False,
-                        resource_link_to_pdr_map=None, version=None, preserve_odata_id_strings=False):
+                        resource_link_to_pdr_map=None, version=None, preserve_odata_id_strings=False,
+                        fixed_int_len=0):
     """
     BEJ encode Action request payload JSON data into an output stream
 
@@ -589,11 +593,15 @@ def bej_action_encode(output_stream, json_data, schema_dict, annot_dict, action_
         annot_dict: The RDE annotation dictionary to use to encode the BEJ
         action_name: The field string (name) of the particular Action being requested
         resource_link_to_pdr_map: Map of uri to resource id
-        bej_version: BEJ version to use in payload
+        version: BEJ version to use in payload
+        preserve_odata_id_strings: If True, resource URIs will be encoded as bejStrings
+        fixed_int_len: Number of bytes used to encode all bejInteger values
 
     Return:
         Returns a tuple (True, pdr_map) to indicate success, (False, None) otherwise.
     """
+    global fixed_integer_length
+    fixed_integer_length = fixed_int_len
     bej_version = 0xF1F0F000
     pdr_map = {}
     is_strict = False
@@ -638,7 +646,9 @@ def bej_encode(output_stream, json_data, schema_dict, annot_dict, verbose=False,
         schema_dict: The RDE schema dictionary to use to encode the BEJ
         annot_dict: The RDE annotation dictionary to use to encode the BEJ
         resource_link_to_pdr_map: Map of uri to resource id
-        bej_version: BEJ version to use in payload
+        version: BEJ version to use in payload
+        preserve_odata_id_strings: If True, resource URIs will be encoded as bejStrings
+        fixed_int_len: Number of bytes used to encode all bejInteger values
 
     Return:
         Returns a tuple (True, pdr_map) to indicate success, (False, None) otherwise.
