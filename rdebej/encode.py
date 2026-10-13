@@ -473,9 +473,12 @@ def bej_encode_sflv(output_stream, schema_dict, annot_dict, dict_to_use, dict_en
         nested_stream = bej_pack_array_start(output_stream, count)
         tmp_seq, selector = bej_decode_sequence_number(seq)
         for i in range(0, count):
-            success = bej_encode_sflv(nested_stream, schema_dict, annot_dict, dict_to_use, array_dict_entry,
-                                      (i << 1) | selector, array_dict_entry[DICTIONARY_ENTRY_FORMAT],
-                                      json_value[i], pdr_map, 0, verbose, is_strict, preserve_odata_id_strings)
+            if json_value[i] is None:
+                success = bej_pack_sfl(nested_stream, (i << 1) | selector, BEJ_FORMAT_NULL, 0, 0)
+            else:
+                success = bej_encode_sflv(nested_stream, schema_dict, annot_dict, dict_to_use, array_dict_entry,
+                                          (i << 1) | selector, array_dict_entry[DICTIONARY_ENTRY_FORMAT],
+                                          json_value[i], pdr_map, 0, verbose, is_strict, preserve_odata_id_strings)
             if not success:
                 break
 
