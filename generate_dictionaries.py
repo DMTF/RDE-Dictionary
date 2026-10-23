@@ -50,7 +50,7 @@ if __name__ == '__main__':
                         required=False)
     parser.add_argument('-c', '--config', help="config file for specific user options", required=False)
 
-    parser.add_argument('-o', '--output', help="The folder(s) to write the RDE dictionary files", nargs='+', required=True)
+    parser.add_argument('-o', '--output', help="The folder to write the RDE dictionary files", nargs=1, required=True)
 
     args = parser.parse_args()
 
@@ -123,7 +123,7 @@ if __name__ == '__main__':
                                   'Size:', len(schema_dictionary.dictionary_byte_array),
                                   'Url:', json.loads(schema_dictionary.json_dictionary)['schema_url'])
 
-                            dir_to_save = args.output[i]
+                            dir_to_save = args.output
 
                             if not os.path.exists(dir_to_save):
                                 os.makedirs(dir_to_save)
@@ -157,7 +157,7 @@ if __name__ == '__main__':
             print('Entries:', len(annotation_dictionary.dictionary), 'Size:',
                   len(annotation_dictionary.dictionary_byte_array))
 
-            dir_to_save = args.output[i]
+            dir_to_save = args.output
 
             with open(dir_to_save + '//' + 'annotation.bin', 'wb') as annotaton_bin:
                 annotaton_bin.write(bytearray(annotation_dictionary.dictionary_byte_array))
